@@ -2,7 +2,7 @@
 
 namespace App\Events;
 
-class TestQueuedEvent extends TestEvent
+class TestCompleteEvent extends TestEvent
 {
 
 	public $test;

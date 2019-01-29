@@ -2,12 +2,8 @@
 
 namespace App\Events;
 
-use Illuminate\Queue\SerializesModels;
-
-class TestStartedEvent extends Event
+class TestStartedEvent extends TestEvent
 {
-
-	use SerializesModels;
 
 	public $test;
 
@@ -19,11 +15,6 @@ class TestStartedEvent extends Event
 	public function __construct($test)
 	{
 		$this->test = $test;
-	}
-
-	public function broadcastOn()
-	{
-		return [ 'test' ];
 	}
 
 }

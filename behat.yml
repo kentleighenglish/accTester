@@ -1,0 +1,5 @@
+default:
+    suites:
+      namcomarketing.com:
+        paths: [ '%paths.base%/features/namcomarketing.com/' ]
+        contexts: [ 'WebContext' ]

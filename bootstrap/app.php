@@ -23,6 +23,10 @@ $app = new Laravel\Lumen\Application(
     dirname(__DIR__)
 );
 
+define('ROOT_PATH', dirname(dirname(__DIR__)));
+
+define('DS', DIRECTORY_SEPARATOR);
+
 $app->withFacades();
 
 $app->withEloquent();

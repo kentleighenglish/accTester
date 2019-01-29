@@ -2,10 +2,9 @@
 
 namespace App\Services;
 
-use Event;
 use App\EloquentModels\QueuedTest;
 use App\Jobs\TestJob;
-use App\Events\{TestStartedEvent, TestFailedEvent, TestQueuedEvent};
+use App\Events\TestQueuedEvent;
 
 class TestsService {
 
@@ -15,8 +14,9 @@ class TestsService {
 
 		$queuedTest->save();
 
-		dispatch((new TestJob($queuedTest))->onQueue('tests'));
-		Event::fire(new TestQueuedEvent($queuedTest));
+		event(new TestQueuedEvent($queuedTest));
+
+		dispatch(new TestJob($queuedTest));
 	}
 
 	public function getTests()

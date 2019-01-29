@@ -73584,7 +73584,11 @@ var _require = __webpack_require__("./resources/js/app/api.js"),
     ep = _require.ep;
 
 var TESTS_TYPES = {
-	'TEST_STARTED': 'TESTS@TEST_STARTED'
+	'TEST_ADDED': 'TESTS@TEST_ADDED',
+	'TEST_QUEUED': 'TESTS@TEST_QUEUED',
+	'TEST_STARTED': 'TESTS@TEST_STARTED',
+	'TEST_COMPLETE': 'TESTS@TEST_COMPLETE',
+	'TEST_FAILED': 'TESTS@TEST_FAILED'
 };
 
 var addTest = function addTest(test) {
@@ -73592,15 +73596,47 @@ var addTest = function addTest(test) {
 
 		post(ep['tests'], { test: test }).then(function () {
 			dispatch({
-				type: TESTS_TYPES.TEST_STARTED,
+				type: TESTS_TYPES.TEST_ADDED,
 				test: test
 			});
 		});
 	};
 };
 
+var eventTestQueued = function eventTestQueued(test) {
+	return {
+		type: TESTS_TYPES.TEST_QUEUED,
+		test: test
+	};
+};
+
+var eventTestStarted = function eventTestStarted(test) {
+	return {
+		type: TESTS_TYPES.TEST_STARTED,
+		test: test
+	};
+};
+
+var eventTestComplete = function eventTestComplete(test) {
+	return {
+		type: TESTS_TYPES.TEST_COMPLETE,
+		test: test
+	};
+};
+
+var eventTestFailed = function eventTestFailed(test) {
+	return {
+		type: TESTS_TYPES.TEST_FAILED,
+		test: test
+	};
+};
+
 module.exports = {
 	addTest: addTest,
+	eventTestQueued: eventTestQueued,
+	eventTestStarted: eventTestStarted,
+	eventTestComplete: eventTestComplete,
+	eventTestFailed: eventTestFailed,
 	TESTS_TYPES: TESTS_TYPES
 };
 
@@ -73809,7 +73845,14 @@ function _classCallCheck(instance, Constructor) {
 }
 
 var _require = __webpack_require__("./resources/js/app/actions/tests.js"),
-    _addTest = _require.addTest;
+    _addTest = _require.addTest,
+    _eventTestQueued = _require.eventTestQueued,
+    _eventTestStarted = _require.eventTestStarted,
+    _eventTestComplete = _require.eventTestComplete,
+    _eventTestFailed = _require.eventTestFailed;
+
+var _require2 = __webpack_require__("./node_modules/lodash/lodash.js"),
+    findIndex = _require2.findIndex;
 
 var AppController = function () {
 	function AppController($scope, $ngRedux, $pusher) {
@@ -73817,25 +73860,48 @@ var AppController = function () {
 
 		this.$pusher = $pusher;
 		$ngRedux.connect(this.mapStateToThis, this.mapDispatchToThis)(this);
+
+		this.disabled = false;
 	}
 
 	_createClass(AppController, [{
 		key: '$onInit',
 		value: function $onInit() {
-			var testsChannel = this.$pusher.subscribe('tests');
-
-			testsChannel.bind('App\\Events\\TestStartedEvent', function (data) {
-				console.log(data);
-			});
+			this.bindEvents();
 		}
 	}, {
 		key: 'bindEvents',
-		value: function bindEvents() {}
+		value: function bindEvents() {
+			var _this = this;
+
+			var testsChannel = this.$pusher.subscribe('tests');
+			testsChannel.bind('App\\Events\\TestQueuedEvent', function (_ref) {
+				var test = _ref.test;
+
+				_this.disabled = false;
+				_this.eventTestQueued(test);
+			});
+			testsChannel.bind('App\\Events\\TestStartedEvent', function (_ref2) {
+				var test = _ref2.test;
+
+				_this.eventTestStarted(test);
+			});
+			testsChannel.bind('App\\Events\\TestCompleteEvent', function (_ref3) {
+				var test = _ref3.test;
+
+				_this.eventTestComplete(test);
+			});
+			testsChannel.bind('App\\Events\\TestFailedEvent', function (_ref4) {
+				var test = _ref4.test;
+
+				_this.eventTestFailed(test);
+			});
+		}
 	}, {
 		key: 'mapStateToThis',
-		value: function mapStateToThis(_ref) {
-			var tests = _ref.tests,
-			    domains = _ref.domains;
+		value: function mapStateToThis(_ref5) {
+			var tests = _ref5.tests,
+			    domains = _ref5.domains;
 
 			return {
 				tests: tests,
@@ -73848,13 +73914,31 @@ var AppController = function () {
 			return {
 				addTest: function addTest(test) {
 					return dispatch(_addTest(test));
+				},
+				eventTestQueued: function eventTestQueued(test) {
+					return dispatch(_eventTestQueued(test));
+				},
+				eventTestStarted: function eventTestStarted(test) {
+					return dispatch(_eventTestStarted(test));
+				},
+				eventTestComplete: function eventTestComplete(test) {
+					return dispatch(_eventTestComplete(test));
+				},
+				eventTestFailed: function eventTestFailed(test) {
+					return dispatch(_eventTestFailed(test));
 				}
 			};
 		}
 	}, {
 		key: 'runTest',
-		value: function runTest() {
-			this.addTest({ domain: 'namcomarketing.com' });
+		value: function runTest(domain) {
+			this.disabled = true;
+			this.addTest({ domain: domain });
+		}
+	}, {
+		key: 'alreadyRunning',
+		value: function alreadyRunning(domain) {
+			return findIndex(this.tests.tests, { domain: domain, run: false }) !== -1;
 		}
 	}]);
 
@@ -73894,8 +73978,22 @@ module.exports = combineReducers({
 "use strict";
 
 
+var _extends = Object.assign || function (target) {
+	for (var i = 1; i < arguments.length; i++) {
+		var source = arguments[i];for (var key in source) {
+			if (Object.prototype.hasOwnProperty.call(source, key)) {
+				target[key] = source[key];
+			}
+		}
+	}return target;
+};
+
 var _require = __webpack_require__("./resources/js/app/actions/tests.js"),
     TESTS_TYPES = _require.TESTS_TYPES;
+
+var _require2 = __webpack_require__("./node_modules/lodash/lodash.js"),
+    findIndex = _require2.findIndex,
+    filter = _require2.filter;
 
 var INITIAL_STATE = {
 	tests: [],
@@ -73907,8 +74005,27 @@ module.exports = function () {
 	var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : INITIAL_STATE;
 	var action = arguments[1];
 
+	var i = null;
+	if (action.test) {
+		i = findIndex(state.tests, { id: action.test.id });
+	}
+
 	switch (action.type) {
+		case TESTS_TYPES.TEST_QUEUED:
 		case TESTS_TYPES.TEST_STARTED:
+		case TESTS_TYPES.TEST_COMPLETE:
+		case TESTS_TYPES.TEST_FAILED:
+
+			if (i !== null && i !== -1) {
+				state.tests[i] = action.test;
+			} else if (i !== null) {
+				state.tests.push(action.test);
+			}
+
+			state = _extends({}, state, {
+				running: filter(state.tests, { running: true }).length,
+				failed: filter(state.tests, { failed: true }).length
+			});
 			break;
 	}
 
