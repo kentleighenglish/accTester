@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+
 use App\Http\Controllers\Controller;
 
 use App\Services\TestsService;
@@ -37,6 +39,13 @@ class TestsController extends Controller
 		$this->testsService->addTest($test);
 
 		return $this->_respond();
+	}
+
+	public function log($id)
+	{
+		if ($id) {
+			return Storage::get("uploads/${id}.log");
+		}
 	}
 
 }

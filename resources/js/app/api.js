@@ -4,7 +4,8 @@ const { reduce, keys } = require('lodash');
 const urlPrefix = '/api/';
 
 const ep = {
-	tests: 'tests'
+	tests: 'tests',
+	logs: 'logs'
 };
 
 var defaults = {
@@ -18,6 +19,14 @@ var defaults = {
 const post = (url, data) => {
 	return _handle(call({
 		method: 'POST',
+		url,
+		data
+	}));
+}
+
+const get = (url, data) => {
+	return _handle(call({
+		method: 'GET',
 		url,
 		data
 	}));
@@ -98,6 +107,7 @@ module.exports = {
 	ep,
 	call,
 	post,
+	get,
 	multipartPost,
 	makeQuery
 }

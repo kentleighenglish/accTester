@@ -4,6 +4,7 @@ const { createLogger } = require('redux-logger');
 const thunk = require('redux-thunk').default;
 
 require('ng-redux');
+require('angular-sanitize');
 const Pusher = require('pusher-js');
 
 // External Libraries
@@ -30,7 +31,8 @@ const store = createStore(rootReducer, initialState, applyMiddleware(...middlewa
 
 module('AccTester', [
 	'AppModule',
-	'ngRedux'
+	'ngRedux',
+	'ngSanitize'
 ])
 .factory('$pusher', () => {
 	return new Pusher(process.env.MIX_PUSHER_APP_KEY, {

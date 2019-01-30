@@ -65,6 +65,935 @@
 /************************************************************************/
 /******/ ({
 
+/***/ "./node_modules/angular-sanitize/angular-sanitize.js":
+/***/ (function(module, exports) {
+
+/**
+ * @license AngularJS v1.7.6
+ * (c) 2010-2018 Google, Inc. http://angularjs.org
+ * License: MIT
+ */
+(function(window, angular) {'use strict';
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ *     Any commits to this file should be reviewed with security in mind.  *
+ *   Changes to this file can potentially create security vulnerabilities. *
+ *          An approval from 2 Core members with history of modifying      *
+ *                         this file is required.                          *
+ *                                                                         *
+ *  Does the change somehow allow for arbitrary javascript to be executed? *
+ *    Or allows for someone to change the prototype of built-in objects?   *
+ *     Or gives undesired access to variables likes document or window?    *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+var $sanitizeMinErr = angular.$$minErr('$sanitize');
+var bind;
+var extend;
+var forEach;
+var isArray;
+var isDefined;
+var lowercase;
+var noop;
+var nodeContains;
+var htmlParser;
+var htmlSanitizeWriter;
+
+/**
+ * @ngdoc module
+ * @name ngSanitize
+ * @description
+ *
+ * The `ngSanitize` module provides functionality to sanitize HTML.
+ *
+ * See {@link ngSanitize.$sanitize `$sanitize`} for usage.
+ */
+
+/**
+ * @ngdoc service
+ * @name $sanitize
+ * @kind function
+ *
+ * @description
+ *   Sanitizes an html string by stripping all potentially dangerous tokens.
+ *
+ *   The input is sanitized by parsing the HTML into tokens. All safe tokens (from a whitelist) are
+ *   then serialized back to a properly escaped HTML string. This means that no unsafe input can make
+ *   it into the returned string.
+ *
+ *   The whitelist for URL sanitization of attribute values is configured using the functions
+ *   `aHrefSanitizationWhitelist` and `imgSrcSanitizationWhitelist` of {@link $compileProvider}.
+ *
+ *   The input may also contain SVG markup if this is enabled via {@link $sanitizeProvider}.
+ *
+ * @param {string} html HTML input.
+ * @returns {string} Sanitized HTML.
+ *
+ * @example
+   <example module="sanitizeExample" deps="angular-sanitize.js" name="sanitize-service">
+   <file name="index.html">
+     <script>
+         angular.module('sanitizeExample', ['ngSanitize'])
+           .controller('ExampleController', ['$scope', '$sce', function($scope, $sce) {
+             $scope.snippet =
+               '<p style="color:blue">an html\n' +
+               '<em onmouseover="this.textContent=\'PWN3D!\'">click here</em>\n' +
+               'snippet</p>';
+             $scope.deliberatelyTrustDangerousSnippet = function() {
+               return $sce.trustAsHtml($scope.snippet);
+             };
+           }]);
+     </script>
+     <div ng-controller="ExampleController">
+        Snippet: <textarea ng-model="snippet" cols="60" rows="3"></textarea>
+       <table>
+         <tr>
+           <td>Directive</td>
+           <td>How</td>
+           <td>Source</td>
+           <td>Rendered</td>
+         </tr>
+         <tr id="bind-html-with-sanitize">
+           <td>ng-bind-html</td>
+           <td>Automatically uses $sanitize</td>
+           <td><pre>&lt;div ng-bind-html="snippet"&gt;<br/>&lt;/div&gt;</pre></td>
+           <td><div ng-bind-html="snippet"></div></td>
+         </tr>
+         <tr id="bind-html-with-trust">
+           <td>ng-bind-html</td>
+           <td>Bypass $sanitize by explicitly trusting the dangerous value</td>
+           <td>
+           <pre>&lt;div ng-bind-html="deliberatelyTrustDangerousSnippet()"&gt;
+&lt;/div&gt;</pre>
+           </td>
+           <td><div ng-bind-html="deliberatelyTrustDangerousSnippet()"></div></td>
+         </tr>
+         <tr id="bind-default">
+           <td>ng-bind</td>
+           <td>Automatically escapes</td>
+           <td><pre>&lt;div ng-bind="snippet"&gt;<br/>&lt;/div&gt;</pre></td>
+           <td><div ng-bind="snippet"></div></td>
+         </tr>
+       </table>
+       </div>
+   </file>
+   <file name="protractor.js" type="protractor">
+     it('should sanitize the html snippet by default', function() {
+       expect(element(by.css('#bind-html-with-sanitize div')).getAttribute('innerHTML')).
+         toBe('<p>an html\n<em>click here</em>\nsnippet</p>');
+     });
+
+     it('should inline raw snippet if bound to a trusted value', function() {
+       expect(element(by.css('#bind-html-with-trust div')).getAttribute('innerHTML')).
+         toBe("<p style=\"color:blue\">an html\n" +
+              "<em onmouseover=\"this.textContent='PWN3D!'\">click here</em>\n" +
+              "snippet</p>");
+     });
+
+     it('should escape snippet without any filter', function() {
+       expect(element(by.css('#bind-default div')).getAttribute('innerHTML')).
+         toBe("&lt;p style=\"color:blue\"&gt;an html\n" +
+              "&lt;em onmouseover=\"this.textContent='PWN3D!'\"&gt;click here&lt;/em&gt;\n" +
+              "snippet&lt;/p&gt;");
+     });
+
+     it('should update', function() {
+       element(by.model('snippet')).clear();
+       element(by.model('snippet')).sendKeys('new <b onclick="alert(1)">text</b>');
+       expect(element(by.css('#bind-html-with-sanitize div')).getAttribute('innerHTML')).
+         toBe('new <b>text</b>');
+       expect(element(by.css('#bind-html-with-trust div')).getAttribute('innerHTML')).toBe(
+         'new <b onclick="alert(1)">text</b>');
+       expect(element(by.css('#bind-default div')).getAttribute('innerHTML')).toBe(
+         "new &lt;b onclick=\"alert(1)\"&gt;text&lt;/b&gt;");
+     });
+   </file>
+   </example>
+ */
+
+
+/**
+ * @ngdoc provider
+ * @name $sanitizeProvider
+ * @this
+ *
+ * @description
+ * Creates and configures {@link $sanitize} instance.
+ */
+function $SanitizeProvider() {
+  var hasBeenInstantiated = false;
+  var svgEnabled = false;
+
+  this.$get = ['$$sanitizeUri', function($$sanitizeUri) {
+    hasBeenInstantiated = true;
+    if (svgEnabled) {
+      extend(validElements, svgElements);
+    }
+    return function(html) {
+      var buf = [];
+      htmlParser(html, htmlSanitizeWriter(buf, function(uri, isImage) {
+        return !/^unsafe:/.test($$sanitizeUri(uri, isImage));
+      }));
+      return buf.join('');
+    };
+  }];
+
+
+  /**
+   * @ngdoc method
+   * @name $sanitizeProvider#enableSvg
+   * @kind function
+   *
+   * @description
+   * Enables a subset of svg to be supported by the sanitizer.
+   *
+   * <div class="alert alert-warning">
+   *   <p>By enabling this setting without taking other precautions, you might expose your
+   *   application to click-hijacking attacks. In these attacks, sanitized svg elements could be positioned
+   *   outside of the containing element and be rendered over other elements on the page (e.g. a login
+   *   link). Such behavior can then result in phishing incidents.</p>
+   *
+   *   <p>To protect against these, explicitly setup `overflow: hidden` css rule for all potential svg
+   *   tags within the sanitized content:</p>
+   *
+   *   <br>
+   *
+   *   <pre><code>
+   *   .rootOfTheIncludedContent svg {
+   *     overflow: hidden !important;
+   *   }
+   *   </code></pre>
+   * </div>
+   *
+   * @param {boolean=} flag Enable or disable SVG support in the sanitizer.
+   * @returns {boolean|$sanitizeProvider} Returns the currently configured value if called
+   *    without an argument or self for chaining otherwise.
+   */
+  this.enableSvg = function(enableSvg) {
+    if (isDefined(enableSvg)) {
+      svgEnabled = enableSvg;
+      return this;
+    } else {
+      return svgEnabled;
+    }
+  };
+
+
+  /**
+   * @ngdoc method
+   * @name $sanitizeProvider#addValidElements
+   * @kind function
+   *
+   * @description
+   * Extends the built-in lists of valid HTML/SVG elements, i.e. elements that are considered safe
+   * and are not stripped off during sanitization. You can extend the following lists of elements:
+   *
+   * - `htmlElements`: A list of elements (tag names) to extend the current list of safe HTML
+   *   elements. HTML elements considered safe will not be removed during sanitization. All other
+   *   elements will be stripped off.
+   *
+   * - `htmlVoidElements`: This is similar to `htmlElements`, but marks the elements as
+   *   "void elements" (similar to HTML
+   *   [void elements](https://rawgit.com/w3c/html/html5.1-2/single-page.html#void-elements)). These
+   *   elements have no end tag and cannot have content.
+   *
+   * - `svgElements`: This is similar to `htmlElements`, but for SVG elements. This list is only
+   *   taken into account if SVG is {@link ngSanitize.$sanitizeProvider#enableSvg enabled} for
+   *   `$sanitize`.
+   *
+   * <div class="alert alert-info">
+   *   This method must be called during the {@link angular.Module#config config} phase. Once the
+   *   `$sanitize` service has been instantiated, this method has no effect.
+   * </div>
+   *
+   * <div class="alert alert-warning">
+   *   Keep in mind that extending the built-in lists of elements may expose your app to XSS or
+   *   other vulnerabilities. Be very mindful of the elements you add.
+   * </div>
+   *
+   * @param {Array<String>|Object} elements - A list of valid HTML elements or an object with one or
+   *   more of the following properties:
+   *   - **htmlElements** - `{Array<String>}` - A list of elements to extend the current list of
+   *     HTML elements.
+   *   - **htmlVoidElements** - `{Array<String>}` - A list of elements to extend the current list of
+   *     void HTML elements; i.e. elements that do not have an end tag.
+   *   - **svgElements** - `{Array<String>}` - A list of elements to extend the current list of SVG
+   *     elements. The list of SVG elements is only taken into account if SVG is
+   *     {@link ngSanitize.$sanitizeProvider#enableSvg enabled} for `$sanitize`.
+   *
+   * Passing an array (`[...]`) is equivalent to passing `{htmlElements: [...]}`.
+   *
+   * @return {$sanitizeProvider} Returns self for chaining.
+   */
+  this.addValidElements = function(elements) {
+    if (!hasBeenInstantiated) {
+      if (isArray(elements)) {
+        elements = {htmlElements: elements};
+      }
+
+      addElementsTo(svgElements, elements.svgElements);
+      addElementsTo(voidElements, elements.htmlVoidElements);
+      addElementsTo(validElements, elements.htmlVoidElements);
+      addElementsTo(validElements, elements.htmlElements);
+    }
+
+    return this;
+  };
+
+
+  /**
+   * @ngdoc method
+   * @name $sanitizeProvider#addValidAttrs
+   * @kind function
+   *
+   * @description
+   * Extends the built-in list of valid attributes, i.e. attributes that are considered safe and are
+   * not stripped off during sanitization.
+   *
+   * **Note**:
+   * The new attributes will not be treated as URI attributes, which means their values will not be
+   * sanitized as URIs using `$compileProvider`'s
+   * {@link ng.$compileProvider#aHrefSanitizationWhitelist aHrefSanitizationWhitelist} and
+   * {@link ng.$compileProvider#imgSrcSanitizationWhitelist imgSrcSanitizationWhitelist}.
+   *
+   * <div class="alert alert-info">
+   *   This method must be called during the {@link angular.Module#config config} phase. Once the
+   *   `$sanitize` service has been instantiated, this method has no effect.
+   * </div>
+   *
+   * <div class="alert alert-warning">
+   *   Keep in mind that extending the built-in list of attributes may expose your app to XSS or
+   *   other vulnerabilities. Be very mindful of the attributes you add.
+   * </div>
+   *
+   * @param {Array<String>} attrs - A list of valid attributes.
+   *
+   * @returns {$sanitizeProvider} Returns self for chaining.
+   */
+  this.addValidAttrs = function(attrs) {
+    if (!hasBeenInstantiated) {
+      extend(validAttrs, arrayToMap(attrs, true));
+    }
+    return this;
+  };
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Private stuff
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  bind = angular.bind;
+  extend = angular.extend;
+  forEach = angular.forEach;
+  isArray = angular.isArray;
+  isDefined = angular.isDefined;
+  lowercase = angular.$$lowercase;
+  noop = angular.noop;
+
+  htmlParser = htmlParserImpl;
+  htmlSanitizeWriter = htmlSanitizeWriterImpl;
+
+  nodeContains = window.Node.prototype.contains || /** @this */ function(arg) {
+    // eslint-disable-next-line no-bitwise
+    return !!(this.compareDocumentPosition(arg) & 16);
+  };
+
+  // Regular Expressions for parsing tags and attributes
+  var SURROGATE_PAIR_REGEXP = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g,
+    // Match everything outside of normal chars and " (quote character)
+    NON_ALPHANUMERIC_REGEXP = /([^#-~ |!])/g;
+
+
+  // Good source of info about elements and attributes
+  // http://dev.w3.org/html5/spec/Overview.html#semantics
+  // http://simon.html5.org/html-elements
+
+  // Safe Void Elements - HTML5
+  // http://dev.w3.org/html5/spec/Overview.html#void-elements
+  var voidElements = stringToMap('area,br,col,hr,img,wbr');
+
+  // Elements that you can, intentionally, leave open (and which close themselves)
+  // http://dev.w3.org/html5/spec/Overview.html#optional-tags
+  var optionalEndTagBlockElements = stringToMap('colgroup,dd,dt,li,p,tbody,td,tfoot,th,thead,tr'),
+      optionalEndTagInlineElements = stringToMap('rp,rt'),
+      optionalEndTagElements = extend({},
+                                              optionalEndTagInlineElements,
+                                              optionalEndTagBlockElements);
+
+  // Safe Block Elements - HTML5
+  var blockElements = extend({}, optionalEndTagBlockElements, stringToMap('address,article,' +
+          'aside,blockquote,caption,center,del,dir,div,dl,figure,figcaption,footer,h1,h2,h3,h4,h5,' +
+          'h6,header,hgroup,hr,ins,map,menu,nav,ol,pre,section,table,ul'));
+
+  // Inline Elements - HTML5
+  var inlineElements = extend({}, optionalEndTagInlineElements, stringToMap('a,abbr,acronym,b,' +
+          'bdi,bdo,big,br,cite,code,del,dfn,em,font,i,img,ins,kbd,label,map,mark,q,ruby,rp,rt,s,' +
+          'samp,small,span,strike,strong,sub,sup,time,tt,u,var'));
+
+  // SVG Elements
+  // https://wiki.whatwg.org/wiki/Sanitization_rules#svg_Elements
+  // Note: the elements animate,animateColor,animateMotion,animateTransform,set are intentionally omitted.
+  // They can potentially allow for arbitrary javascript to be executed. See #11290
+  var svgElements = stringToMap('circle,defs,desc,ellipse,font-face,font-face-name,font-face-src,g,glyph,' +
+          'hkern,image,linearGradient,line,marker,metadata,missing-glyph,mpath,path,polygon,polyline,' +
+          'radialGradient,rect,stop,svg,switch,text,title,tspan');
+
+  // Blocked Elements (will be stripped)
+  var blockedElements = stringToMap('script,style');
+
+  var validElements = extend({},
+                                     voidElements,
+                                     blockElements,
+                                     inlineElements,
+                                     optionalEndTagElements);
+
+  //Attributes that have href and hence need to be sanitized
+  var uriAttrs = stringToMap('background,cite,href,longdesc,src,xlink:href,xml:base');
+
+  var htmlAttrs = stringToMap('abbr,align,alt,axis,bgcolor,border,cellpadding,cellspacing,class,clear,' +
+      'color,cols,colspan,compact,coords,dir,face,headers,height,hreflang,hspace,' +
+      'ismap,lang,language,nohref,nowrap,rel,rev,rows,rowspan,rules,' +
+      'scope,scrolling,shape,size,span,start,summary,tabindex,target,title,type,' +
+      'valign,value,vspace,width');
+
+  // SVG attributes (without "id" and "name" attributes)
+  // https://wiki.whatwg.org/wiki/Sanitization_rules#svg_Attributes
+  var svgAttrs = stringToMap('accent-height,accumulate,additive,alphabetic,arabic-form,ascent,' +
+      'baseProfile,bbox,begin,by,calcMode,cap-height,class,color,color-rendering,content,' +
+      'cx,cy,d,dx,dy,descent,display,dur,end,fill,fill-rule,font-family,font-size,font-stretch,' +
+      'font-style,font-variant,font-weight,from,fx,fy,g1,g2,glyph-name,gradientUnits,hanging,' +
+      'height,horiz-adv-x,horiz-origin-x,ideographic,k,keyPoints,keySplines,keyTimes,lang,' +
+      'marker-end,marker-mid,marker-start,markerHeight,markerUnits,markerWidth,mathematical,' +
+      'max,min,offset,opacity,orient,origin,overline-position,overline-thickness,panose-1,' +
+      'path,pathLength,points,preserveAspectRatio,r,refX,refY,repeatCount,repeatDur,' +
+      'requiredExtensions,requiredFeatures,restart,rotate,rx,ry,slope,stemh,stemv,stop-color,' +
+      'stop-opacity,strikethrough-position,strikethrough-thickness,stroke,stroke-dasharray,' +
+      'stroke-dashoffset,stroke-linecap,stroke-linejoin,stroke-miterlimit,stroke-opacity,' +
+      'stroke-width,systemLanguage,target,text-anchor,to,transform,type,u1,u2,underline-position,' +
+      'underline-thickness,unicode,unicode-range,units-per-em,values,version,viewBox,visibility,' +
+      'width,widths,x,x-height,x1,x2,xlink:actuate,xlink:arcrole,xlink:role,xlink:show,xlink:title,' +
+      'xlink:type,xml:base,xml:lang,xml:space,xmlns,xmlns:xlink,y,y1,y2,zoomAndPan', true);
+
+  var validAttrs = extend({},
+                                  uriAttrs,
+                                  svgAttrs,
+                                  htmlAttrs);
+
+  function stringToMap(str, lowercaseKeys) {
+    return arrayToMap(str.split(','), lowercaseKeys);
+  }
+
+  function arrayToMap(items, lowercaseKeys) {
+    var obj = {}, i;
+    for (i = 0; i < items.length; i++) {
+      obj[lowercaseKeys ? lowercase(items[i]) : items[i]] = true;
+    }
+    return obj;
+  }
+
+  function addElementsTo(elementsMap, newElements) {
+    if (newElements && newElements.length) {
+      extend(elementsMap, arrayToMap(newElements));
+    }
+  }
+
+  /**
+   * Create an inert document that contains the dirty HTML that needs sanitizing
+   * Depending upon browser support we use one of three strategies for doing this.
+   * Support: Safari 10.x -> XHR strategy
+   * Support: Firefox -> DomParser strategy
+   */
+  var getInertBodyElement /* function(html: string): HTMLBodyElement */ = (function(window, document) {
+    var inertDocument;
+    if (document && document.implementation) {
+      inertDocument = document.implementation.createHTMLDocument('inert');
+    } else {
+      throw $sanitizeMinErr('noinert', 'Can\'t create an inert html document');
+    }
+    var inertBodyElement = (inertDocument.documentElement || inertDocument.getDocumentElement()).querySelector('body');
+
+    // Check for the Safari 10.1 bug - which allows JS to run inside the SVG G element
+    inertBodyElement.innerHTML = '<svg><g onload="this.parentNode.remove()"></g></svg>';
+    if (!inertBodyElement.querySelector('svg')) {
+      return getInertBodyElement_XHR;
+    } else {
+      // Check for the Firefox bug - which prevents the inner img JS from being sanitized
+      inertBodyElement.innerHTML = '<svg><p><style><img src="</style><img src=x onerror=alert(1)//">';
+      if (inertBodyElement.querySelector('svg img')) {
+        return getInertBodyElement_DOMParser;
+      } else {
+        return getInertBodyElement_InertDocument;
+      }
+    }
+
+    function getInertBodyElement_XHR(html) {
+      // We add this dummy element to ensure that the rest of the content is parsed as expected
+      // e.g. leading whitespace is maintained and tags like `<meta>` do not get hoisted to the `<head>` tag.
+      html = '<remove></remove>' + html;
+      try {
+        html = encodeURI(html);
+      } catch (e) {
+        return undefined;
+      }
+      var xhr = new window.XMLHttpRequest();
+      xhr.responseType = 'document';
+      xhr.open('GET', 'data:text/html;charset=utf-8,' + html, false);
+      xhr.send(null);
+      var body = xhr.response.body;
+      body.firstChild.remove();
+      return body;
+    }
+
+    function getInertBodyElement_DOMParser(html) {
+      // We add this dummy element to ensure that the rest of the content is parsed as expected
+      // e.g. leading whitespace is maintained and tags like `<meta>` do not get hoisted to the `<head>` tag.
+      html = '<remove></remove>' + html;
+      try {
+        var body = new window.DOMParser().parseFromString(html, 'text/html').body;
+        body.firstChild.remove();
+        return body;
+      } catch (e) {
+        return undefined;
+      }
+    }
+
+    function getInertBodyElement_InertDocument(html) {
+      inertBodyElement.innerHTML = html;
+
+      // Support: IE 9-11 only
+      // strip custom-namespaced attributes on IE<=11
+      if (document.documentMode) {
+        stripCustomNsAttrs(inertBodyElement);
+      }
+
+      return inertBodyElement;
+    }
+  })(window, window.document);
+
+  /**
+   * @example
+   * htmlParser(htmlString, {
+   *     start: function(tag, attrs) {},
+   *     end: function(tag) {},
+   *     chars: function(text) {},
+   *     comment: function(text) {}
+   * });
+   *
+   * @param {string} html string
+   * @param {object} handler
+   */
+  function htmlParserImpl(html, handler) {
+    if (html === null || html === undefined) {
+      html = '';
+    } else if (typeof html !== 'string') {
+      html = '' + html;
+    }
+
+    var inertBodyElement = getInertBodyElement(html);
+    if (!inertBodyElement) return '';
+
+    //mXSS protection
+    var mXSSAttempts = 5;
+    do {
+      if (mXSSAttempts === 0) {
+        throw $sanitizeMinErr('uinput', 'Failed to sanitize html because the input is unstable');
+      }
+      mXSSAttempts--;
+
+      // trigger mXSS if it is going to happen by reading and writing the innerHTML
+      html = inertBodyElement.innerHTML;
+      inertBodyElement = getInertBodyElement(html);
+    } while (html !== inertBodyElement.innerHTML);
+
+    var node = inertBodyElement.firstChild;
+    while (node) {
+      switch (node.nodeType) {
+        case 1: // ELEMENT_NODE
+          handler.start(node.nodeName.toLowerCase(), attrToMap(node.attributes));
+          break;
+        case 3: // TEXT NODE
+          handler.chars(node.textContent);
+          break;
+      }
+
+      var nextNode;
+      if (!(nextNode = node.firstChild)) {
+        if (node.nodeType === 1) {
+          handler.end(node.nodeName.toLowerCase());
+        }
+        nextNode = getNonDescendant('nextSibling', node);
+        if (!nextNode) {
+          while (nextNode == null) {
+            node = getNonDescendant('parentNode', node);
+            if (node === inertBodyElement) break;
+            nextNode = getNonDescendant('nextSibling', node);
+            if (node.nodeType === 1) {
+              handler.end(node.nodeName.toLowerCase());
+            }
+          }
+        }
+      }
+      node = nextNode;
+    }
+
+    while ((node = inertBodyElement.firstChild)) {
+      inertBodyElement.removeChild(node);
+    }
+  }
+
+  function attrToMap(attrs) {
+    var map = {};
+    for (var i = 0, ii = attrs.length; i < ii; i++) {
+      var attr = attrs[i];
+      map[attr.name] = attr.value;
+    }
+    return map;
+  }
+
+
+  /**
+   * Escapes all potentially dangerous characters, so that the
+   * resulting string can be safely inserted into attribute or
+   * element text.
+   * @param value
+   * @returns {string} escaped text
+   */
+  function encodeEntities(value) {
+    return value.
+      replace(/&/g, '&amp;').
+      replace(SURROGATE_PAIR_REGEXP, function(value) {
+        var hi = value.charCodeAt(0);
+        var low = value.charCodeAt(1);
+        return '&#' + (((hi - 0xD800) * 0x400) + (low - 0xDC00) + 0x10000) + ';';
+      }).
+      replace(NON_ALPHANUMERIC_REGEXP, function(value) {
+        return '&#' + value.charCodeAt(0) + ';';
+      }).
+      replace(/</g, '&lt;').
+      replace(/>/g, '&gt;');
+  }
+
+  /**
+   * create an HTML/XML writer which writes to buffer
+   * @param {Array} buf use buf.join('') to get out sanitized html string
+   * @returns {object} in the form of {
+   *     start: function(tag, attrs) {},
+   *     end: function(tag) {},
+   *     chars: function(text) {},
+   *     comment: function(text) {}
+   * }
+   */
+  function htmlSanitizeWriterImpl(buf, uriValidator) {
+    var ignoreCurrentElement = false;
+    var out = bind(buf, buf.push);
+    return {
+      start: function(tag, attrs) {
+        tag = lowercase(tag);
+        if (!ignoreCurrentElement && blockedElements[tag]) {
+          ignoreCurrentElement = tag;
+        }
+        if (!ignoreCurrentElement && validElements[tag] === true) {
+          out('<');
+          out(tag);
+          forEach(attrs, function(value, key) {
+            var lkey = lowercase(key);
+            var isImage = (tag === 'img' && lkey === 'src') || (lkey === 'background');
+            if (validAttrs[lkey] === true &&
+              (uriAttrs[lkey] !== true || uriValidator(value, isImage))) {
+              out(' ');
+              out(key);
+              out('="');
+              out(encodeEntities(value));
+              out('"');
+            }
+          });
+          out('>');
+        }
+      },
+      end: function(tag) {
+        tag = lowercase(tag);
+        if (!ignoreCurrentElement && validElements[tag] === true && voidElements[tag] !== true) {
+          out('</');
+          out(tag);
+          out('>');
+        }
+        // eslint-disable-next-line eqeqeq
+        if (tag == ignoreCurrentElement) {
+          ignoreCurrentElement = false;
+        }
+      },
+      chars: function(chars) {
+        if (!ignoreCurrentElement) {
+          out(encodeEntities(chars));
+        }
+      }
+    };
+  }
+
+
+  /**
+   * When IE9-11 comes across an unknown namespaced attribute e.g. 'xlink:foo' it adds 'xmlns:ns1' attribute to declare
+   * ns1 namespace and prefixes the attribute with 'ns1' (e.g. 'ns1:xlink:foo'). This is undesirable since we don't want
+   * to allow any of these custom attributes. This method strips them all.
+   *
+   * @param node Root element to process
+   */
+  function stripCustomNsAttrs(node) {
+    while (node) {
+      if (node.nodeType === window.Node.ELEMENT_NODE) {
+        var attrs = node.attributes;
+        for (var i = 0, l = attrs.length; i < l; i++) {
+          var attrNode = attrs[i];
+          var attrName = attrNode.name.toLowerCase();
+          if (attrName === 'xmlns:ns1' || attrName.lastIndexOf('ns1:', 0) === 0) {
+            node.removeAttributeNode(attrNode);
+            i--;
+            l--;
+          }
+        }
+      }
+
+      var nextNode = node.firstChild;
+      if (nextNode) {
+        stripCustomNsAttrs(nextNode);
+      }
+
+      node = getNonDescendant('nextSibling', node);
+    }
+  }
+
+  function getNonDescendant(propName, node) {
+    // An element is clobbered if its `propName` property points to one of its descendants
+    var nextNode = node[propName];
+    if (nextNode && nodeContains.call(node, nextNode)) {
+      throw $sanitizeMinErr('elclob', 'Failed to sanitize html because the element is clobbered: {0}', node.outerHTML || node.outerText);
+    }
+    return nextNode;
+  }
+}
+
+function sanitizeText(chars) {
+  var buf = [];
+  var writer = htmlSanitizeWriter(buf, noop);
+  writer.chars(chars);
+  return buf.join('');
+}
+
+
+// define ngSanitize module and register $sanitize service
+angular.module('ngSanitize', [])
+  .provider('$sanitize', $SanitizeProvider)
+  .info({ angularVersion: '1.7.6' });
+
+/**
+ * @ngdoc filter
+ * @name linky
+ * @kind function
+ *
+ * @description
+ * Finds links in text input and turns them into html links. Supports `http/https/ftp/sftp/mailto` and
+ * plain email address links.
+ *
+ * Requires the {@link ngSanitize `ngSanitize`} module to be installed.
+ *
+ * @param {string} text Input text.
+ * @param {string} [target] Window (`_blank|_self|_parent|_top`) or named frame to open links in.
+ * @param {object|function(url)} [attributes] Add custom attributes to the link element.
+ *
+ *    Can be one of:
+ *
+ *    - `object`: A map of attributes
+ *    - `function`: Takes the url as a parameter and returns a map of attributes
+ *
+ *    If the map of attributes contains a value for `target`, it overrides the value of
+ *    the target parameter.
+ *
+ *
+ * @returns {string} Html-linkified and {@link $sanitize sanitized} text.
+ *
+ * @usage
+   <span ng-bind-html="linky_expression | linky"></span>
+ *
+ * @example
+   <example module="linkyExample" deps="angular-sanitize.js" name="linky-filter">
+     <file name="index.html">
+       <div ng-controller="ExampleController">
+       Snippet: <textarea ng-model="snippet" cols="60" rows="3"></textarea>
+       <table>
+         <tr>
+           <th>Filter</th>
+           <th>Source</th>
+           <th>Rendered</th>
+         </tr>
+         <tr id="linky-filter">
+           <td>linky filter</td>
+           <td>
+             <pre>&lt;div ng-bind-html="snippet | linky"&gt;<br>&lt;/div&gt;</pre>
+           </td>
+           <td>
+             <div ng-bind-html="snippet | linky"></div>
+           </td>
+         </tr>
+         <tr id="linky-target">
+          <td>linky target</td>
+          <td>
+            <pre>&lt;div ng-bind-html="snippetWithSingleURL | linky:'_blank'"&gt;<br>&lt;/div&gt;</pre>
+          </td>
+          <td>
+            <div ng-bind-html="snippetWithSingleURL | linky:'_blank'"></div>
+          </td>
+         </tr>
+         <tr id="linky-custom-attributes">
+          <td>linky custom attributes</td>
+          <td>
+            <pre>&lt;div ng-bind-html="snippetWithSingleURL | linky:'_self':{rel: 'nofollow'}"&gt;<br>&lt;/div&gt;</pre>
+          </td>
+          <td>
+            <div ng-bind-html="snippetWithSingleURL | linky:'_self':{rel: 'nofollow'}"></div>
+          </td>
+         </tr>
+         <tr id="escaped-html">
+           <td>no filter</td>
+           <td><pre>&lt;div ng-bind="snippet"&gt;<br>&lt;/div&gt;</pre></td>
+           <td><div ng-bind="snippet"></div></td>
+         </tr>
+       </table>
+     </file>
+     <file name="script.js">
+       angular.module('linkyExample', ['ngSanitize'])
+         .controller('ExampleController', ['$scope', function($scope) {
+           $scope.snippet =
+             'Pretty text with some links:\n' +
+             'http://angularjs.org/,\n' +
+             'mailto:us@somewhere.org,\n' +
+             'another@somewhere.org,\n' +
+             'and one more: ftp://127.0.0.1/.';
+           $scope.snippetWithSingleURL = 'http://angularjs.org/';
+         }]);
+     </file>
+     <file name="protractor.js" type="protractor">
+       it('should linkify the snippet with urls', function() {
+         expect(element(by.id('linky-filter')).element(by.binding('snippet | linky')).getText()).
+             toBe('Pretty text with some links: http://angularjs.org/, us@somewhere.org, ' +
+                  'another@somewhere.org, and one more: ftp://127.0.0.1/.');
+         expect(element.all(by.css('#linky-filter a')).count()).toEqual(4);
+       });
+
+       it('should not linkify snippet without the linky filter', function() {
+         expect(element(by.id('escaped-html')).element(by.binding('snippet')).getText()).
+             toBe('Pretty text with some links: http://angularjs.org/, mailto:us@somewhere.org, ' +
+                  'another@somewhere.org, and one more: ftp://127.0.0.1/.');
+         expect(element.all(by.css('#escaped-html a')).count()).toEqual(0);
+       });
+
+       it('should update', function() {
+         element(by.model('snippet')).clear();
+         element(by.model('snippet')).sendKeys('new http://link.');
+         expect(element(by.id('linky-filter')).element(by.binding('snippet | linky')).getText()).
+             toBe('new http://link.');
+         expect(element.all(by.css('#linky-filter a')).count()).toEqual(1);
+         expect(element(by.id('escaped-html')).element(by.binding('snippet')).getText())
+             .toBe('new http://link.');
+       });
+
+       it('should work with the target property', function() {
+        expect(element(by.id('linky-target')).
+            element(by.binding("snippetWithSingleURL | linky:'_blank'")).getText()).
+            toBe('http://angularjs.org/');
+        expect(element(by.css('#linky-target a')).getAttribute('target')).toEqual('_blank');
+       });
+
+       it('should optionally add custom attributes', function() {
+        expect(element(by.id('linky-custom-attributes')).
+            element(by.binding("snippetWithSingleURL | linky:'_self':{rel: 'nofollow'}")).getText()).
+            toBe('http://angularjs.org/');
+        expect(element(by.css('#linky-custom-attributes a')).getAttribute('rel')).toEqual('nofollow');
+       });
+     </file>
+   </example>
+ */
+angular.module('ngSanitize').filter('linky', ['$sanitize', function($sanitize) {
+  var LINKY_URL_REGEXP =
+        /((s?ftp|https?):\/\/|(www\.)|(mailto:)?[A-Za-z0-9._%+-]+@)\S*[^\s.;,(){}<>"\u201d\u2019]/i,
+      MAILTO_REGEXP = /^mailto:/i;
+
+  var linkyMinErr = angular.$$minErr('linky');
+  var isDefined = angular.isDefined;
+  var isFunction = angular.isFunction;
+  var isObject = angular.isObject;
+  var isString = angular.isString;
+
+  return function(text, target, attributes) {
+    if (text == null || text === '') return text;
+    if (!isString(text)) throw linkyMinErr('notstring', 'Expected string but received: {0}', text);
+
+    var attributesFn =
+      isFunction(attributes) ? attributes :
+      isObject(attributes) ? function getAttributesObject() {return attributes;} :
+      function getEmptyAttributesObject() {return {};};
+
+    var match;
+    var raw = text;
+    var html = [];
+    var url;
+    var i;
+    while ((match = raw.match(LINKY_URL_REGEXP))) {
+      // We can not end in these as they are sometimes found at the end of the sentence
+      url = match[0];
+      // if we did not match ftp/http/www/mailto then assume mailto
+      if (!match[2] && !match[4]) {
+        url = (match[3] ? 'http://' : 'mailto:') + url;
+      }
+      i = match.index;
+      addText(raw.substr(0, i));
+      addLink(url, match[0].replace(MAILTO_REGEXP, ''));
+      raw = raw.substring(i + match[0].length);
+    }
+    addText(raw);
+    return $sanitize(html.join(''));
+
+    function addText(text) {
+      if (!text) {
+        return;
+      }
+      html.push(sanitizeText(text));
+    }
+
+    function addLink(url, text) {
+      var key, linkAttributes = attributesFn(url);
+      html.push('<a ');
+
+      for (key in linkAttributes) {
+        html.push(key + '="' + linkAttributes[key] + '" ');
+      }
+
+      if (isDefined(target) && !('target' in linkAttributes)) {
+        html.push('target="',
+                  target,
+                  '" ');
+      }
+      html.push('href="',
+                url.replace(/"/g, '&quot;'),
+                '">');
+      addText(text);
+      html.push('</a>');
+    }
+  };
+}]);
+
+
+})(window, window.angular);
+
+
+/***/ }),
+
+/***/ "./node_modules/angular-sanitize/index.js":
+/***/ (function(module, exports, __webpack_require__) {
+
+__webpack_require__("./node_modules/angular-sanitize/angular-sanitize.js");
+module.exports = 'ngSanitize';
+
+
+/***/ }),
+
 /***/ "./node_modules/angular/angular.js":
 /***/ (function(module, exports) {
 
@@ -36482,6 +37411,446 @@ $provide.value("$locale", {
 __webpack_require__("./node_modules/angular/angular.js");
 module.exports = angular;
 
+
+/***/ }),
+
+/***/ "./node_modules/ansicolor/build/ansicolor.js":
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+/*  ------------------------------------------------------------------------ */
+
+var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
+
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) arr2[i] = arr[i]; return arr2; } else { return Array.from(arr); } }
+
+const O = Object;
+
+/*  See https://misc.flogisoft.com/bash/tip_colors_and_formatting
+    ------------------------------------------------------------------------ */
+
+const colorCodes = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'lightGray', '', 'default'],
+      colorCodesLight = ['darkGray', 'lightRed', 'lightGreen', 'lightYellow', 'lightBlue', 'lightMagenta', 'lightCyan', 'white', ''],
+      styleCodes = ['', 'bright', 'dim', 'italic', 'underline', '', '', 'inverse'],
+      asBright = { 'red': 'lightRed',
+    'green': 'lightGreen',
+    'yellow': 'lightYellow',
+    'blue': 'lightBlue',
+    'magenta': 'lightMagenta',
+    'cyan': 'lightCyan',
+    'black': 'darkGray',
+    'lightGray': 'white' },
+      types = { 0: 'style',
+    2: 'unstyle',
+    3: 'color',
+    9: 'colorLight',
+    4: 'bgColor',
+    10: 'bgColorLight' },
+      subtypes = { color: colorCodes,
+    colorLight: colorCodesLight,
+    bgColor: colorCodes,
+    bgColorLight: colorCodesLight,
+    style: styleCodes,
+    unstyle: styleCodes
+
+    /*  ------------------------------------------------------------------------ */
+
+};const clean = obj => {
+    for (const k in obj) {
+        if (!obj[k]) {
+            delete obj[k];
+        }
+    }
+    return O.keys(obj).length === 0 ? undefined : obj;
+};
+
+/*  ------------------------------------------------------------------------ */
+
+class Color {
+
+    constructor(background, name, brightness) {
+
+        this.background = background;
+        this.name = name;
+        this.brightness = brightness;
+    }
+
+    get inverse() {
+        return new Color(!this.background, this.name || (this.background ? 'black' : 'white'), this.brightness);
+    }
+
+    get clean() {
+        return clean({ name: this.name === 'default' ? '' : this.name,
+            bright: this.brightness === Code.bright,
+            dim: this.brightness === Code.dim });
+    }
+
+    defaultBrightness(value) {
+
+        return new Color(this.background, this.name, this.brightness || value);
+    }
+
+    css(inverted) {
+
+        const color = inverted ? this.inverse : this;
+
+        const rgbName = color.brightness === Code.bright && asBright[color.name] || color.name;
+
+        const prop = color.background ? 'background:' : 'color:',
+              rgb = Colors.rgb[rgbName],
+              alpha = this.brightness === Code.dim ? 0.5 : 1;
+
+        return rgb ? prop + 'rgba(' + [].concat(_toConsumableArray(rgb), [alpha]).join(',') + ');' : !color.background && alpha < 1 ? 'color:rgba(0,0,0,0.5);' : ''; // Chrome does not support 'opacity' property...
+    }
+}
+
+/*  ------------------------------------------------------------------------ */
+
+class Code {
+
+    constructor(n) {
+        if (n !== undefined) {
+            this.value = Number(n);
+        }
+    }
+
+    get type() {
+        return types[Math.floor(this.value / 10)];
+    }
+
+    get subtype() {
+        return subtypes[this.type][this.value % 10];
+    }
+
+    get str() {
+        return this.value ? '\u001b\[' + this.value + 'm' : '';
+    }
+
+    static str(x) {
+        return new Code(x).str;
+    }
+
+    get isBrightness() {
+        return this.value === Code.noBrightness || this.value === Code.bright || this.value === Code.dim;
+    }
+}
+
+/*  ------------------------------------------------------------------------ */
+
+O.assign(Code, {
+
+    reset: 0,
+    bright: 1,
+    dim: 2,
+    inverse: 7,
+    noBrightness: 22,
+    noItalic: 23,
+    noUnderline: 24,
+    noInverse: 27,
+    noColor: 39,
+    noBgColor: 49
+});
+
+/*  ------------------------------------------------------------------------ */
+
+const replaceAll = (str, a, b) => str.split(a).join(b);
+
+/*  ANSI brightness codes do not overlap, e.g. "{bright}{dim}foo" will be rendered bright (not dim).
+    So we fix it by adding brightness canceling before each brightness code, so the former example gets
+    converted to "{noBrightness}{bright}{noBrightness}{dim}foo" – this way it gets rendered as expected.
+ */
+
+const denormalizeBrightness = s => s.replace(/(\u001b\[(1|2)m)/g, '\u001b[22m$1');
+const normalizeBrightness = s => s.replace(/\u001b\[22m(\u001b\[(1|2)m)/g, '$1');
+
+const wrap = (x, openCode, closeCode) => {
+
+    const open = Code.str(openCode),
+          close = Code.str(closeCode);
+
+    return String(x).split('\n').map(line => denormalizeBrightness(open + replaceAll(normalizeBrightness(line), close, open) + close)).join('\n');
+};
+
+/*  ------------------------------------------------------------------------ */
+
+const camel = (a, b) => a + b.charAt(0).toUpperCase() + b.slice(1);
+
+const stringWrappingMethods = (() => [].concat(_toConsumableArray(colorCodes.map((k, i) => !k ? [] : [// color methods
+
+[k, 30 + i, Code.noColor], [camel('bg', k), 40 + i, Code.noBgColor]])), _toConsumableArray(colorCodesLight.map((k, i) => !k ? [] : [// light color methods
+
+[k, 90 + i, Code.noColor], [camel('bg', k), 100 + i, Code.noBgColor]])), _toConsumableArray(['', 'BrightRed', 'BrightGreen', 'BrightYellow', 'BrightBlue', 'BrightMagenta', 'BrightCyan'].map((k, i) => !k ? [] : [['bg' + k, 100 + i, Code.noBgColor]])), _toConsumableArray(styleCodes.map((k, i) => !k ? [] : [// style methods
+
+[k, i, k === 'bright' || k === 'dim' ? Code.noBrightness : 20 + i]]))).reduce((a, b) => a.concat(b)))();
+
+/*  ------------------------------------------------------------------------ */
+
+const assignStringWrappingAPI = function (target) {
+    let wrapBefore = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : target;
+    return stringWrappingMethods.reduce((memo, _ref) => {
+        var _ref2 = _slicedToArray(_ref, 3);
+
+        let k = _ref2[0],
+            open = _ref2[1],
+            close = _ref2[2];
+        return O.defineProperty(memo, k, {
+            get: () => assignStringWrappingAPI(str => wrapBefore(wrap(str, open, close)))
+        });
+    }, target);
+};
+
+/*  ------------------------------------------------------------------------ */
+
+const TEXT = 0,
+      BRACKET = 1,
+      CODE = 2;
+
+function rawParse(s) {
+
+    let state = TEXT,
+        buffer = '',
+        text = '',
+        code = '',
+        codes = [];
+    let spans = [];
+
+    for (let i = 0, n = s.length; i < n; i++) {
+
+        const c = s[i];
+
+        buffer += c;
+
+        switch (state) {
+
+            case TEXT:
+                if (c === '\u001b') {
+                    state = BRACKET;buffer = c;
+                } else {
+                    text += c;
+                }
+                break;
+
+            case BRACKET:
+                if (c === '[') {
+                    state = CODE;code = '';codes = [];
+                } else {
+                    state = TEXT;text += buffer;
+                }
+                break;
+
+            case CODE:
+
+                if (c >= '0' && c <= '9') {
+                    code += c;
+                } else if (c === ';') {
+                    codes.push(new Code(code));code = '';
+                } else if (c === 'm' && code.length) {
+                    codes.push(new Code(code));
+                    for (const code of codes) {
+                        spans.push({ text, code });text = '';
+                    }
+                    state = TEXT;
+                } else {
+                    state = TEXT;text += buffer;
+                }
+        }
+    }
+
+    if (state !== TEXT) text += buffer;
+
+    if (text) spans.push({ text, code: new Code() });
+
+    return spans;
+}
+
+/*  ------------------------------------------------------------------------ */
+
+/**
+ * Represents an ANSI-escaped string.
+ */
+class Colors {
+
+    /**
+     * @param {string} s a string containing ANSI escape codes.
+     */
+    constructor(s) {
+
+        this.spans = s ? rawParse(s) : [];
+    }
+
+    get str() {
+        return this.spans.reduce((str, p) => str + p.text + p.code.str, '');
+    }
+
+    get parsed() {
+
+        let color, bgColor, brightness, styles;
+
+        function reset() {
+
+            color = new Color(), bgColor = new Color(true /* background */), brightness = undefined, styles = new Set();
+        }
+
+        reset();
+
+        return O.assign(new Colors(), {
+
+            spans: this.spans.map(span => {
+
+                const c = span.code;
+
+                const inverted = styles.has('inverse'),
+                      underline = styles.has('underline') ? 'text-decoration: underline;' : '',
+                      italic = styles.has('italic') ? 'font-style: italic;' : '',
+                      bold = brightness === Code.bright ? 'font-weight: bold;' : '';
+
+                const foreColor = color.defaultBrightness(brightness);
+
+                const styledSpan = O.assign({ css: bold + italic + underline + foreColor.css(inverted) + bgColor.css(inverted) }, clean({ bold: !!bold, color: foreColor.clean, bgColor: bgColor.clean }), span);
+
+                for (const k of styles) {
+                    styledSpan[k] = true;
+                }
+
+                if (c.isBrightness) {
+
+                    brightness = c.value;
+                } else if (span.code.value !== undefined) {
+
+                    if (span.code.value === Code.reset) {
+                        reset();
+                    } else {
+
+                        switch (span.code.type) {
+
+                            case 'color':
+                            case 'colorLight':
+                                color = new Color(false, c.subtype);break;
+
+                            case 'bgColor':
+                            case 'bgColorLight':
+                                bgColor = new Color(true, c.subtype);break;
+
+                            case 'style':
+                                styles.add(c.subtype);break;
+                            case 'unstyle':
+                                styles.delete(c.subtype);break;
+                        }
+                    }
+                }
+
+                return styledSpan;
+            }).filter(s => s.text.length > 0)
+        });
+    }
+
+    /*  Outputs with Chrome DevTools-compatible format     */
+
+    get asChromeConsoleLogArguments() {
+
+        const spans = this.parsed.spans;
+
+        return [spans.map(s => '%c' + s.text).join('')].concat(_toConsumableArray(spans.map(s => s.css)));
+    }
+
+    get browserConsoleArguments() /* LEGACY, DEPRECATED */{
+        return this.asChromeConsoleLogArguments;
+    }
+
+    /**
+     * @desc installs String prototype extensions
+     * @example
+     * require ('ansicolor').nice
+     * console.log ('foo'.bright.red)
+     */
+    static get nice() {
+
+        Colors.names.forEach(k => {
+            if (!(k in String.prototype)) {
+                O.defineProperty(String.prototype, k, { get: function () {
+                        return Colors[k](this);
+                    } });
+            }
+        });
+
+        return Colors;
+    }
+
+    /**
+     * @desc parses a string containing ANSI escape codes
+     * @return {Colors} parsed representation.
+     */
+    static parse(s) {
+        return new Colors(s).parsed;
+    }
+
+    /**
+     * @desc strips ANSI codes from a string
+     * @param {string} s a string containing ANSI escape codes.
+     * @return {string} clean string.
+     */
+    static strip(s) {
+        return s.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PRZcf-nqry=><]/g, ''); // hope V8 caches the regexp
+    }
+
+    /**
+     * @example
+     * const spans = [...ansi.parse ('\u001b[7m\u001b[7mfoo\u001b[7mbar\u001b[27m')]
+     */
+    [Symbol.iterator]() {
+        return this.spans[Symbol.iterator]();
+    }
+}
+
+/*  ------------------------------------------------------------------------ */
+
+assignStringWrappingAPI(Colors, str => str);
+
+/*  ------------------------------------------------------------------------ */
+
+Colors.names = stringWrappingMethods.map((_ref3) => {
+    var _ref4 = _slicedToArray(_ref3, 1);
+
+    let k = _ref4[0];
+    return k;
+});
+
+/*  ------------------------------------------------------------------------ */
+
+Colors.rgb = {
+
+    black: [0, 0, 0],
+    darkGray: [100, 100, 100],
+    lightGray: [200, 200, 200],
+    white: [255, 255, 255],
+
+    red: [204, 0, 0],
+    lightRed: [255, 51, 0],
+
+    green: [0, 204, 0],
+    lightGreen: [51, 204, 51],
+
+    yellow: [204, 102, 0],
+    lightYellow: [255, 153, 51],
+
+    blue: [0, 0, 255],
+    lightBlue: [26, 140, 255],
+
+    magenta: [204, 0, 204],
+    lightMagenta: [255, 0, 255],
+
+    cyan: [0, 153, 255],
+    lightCyan: [0, 204, 255]
+
+    /*  ------------------------------------------------------------------------ */
+
+};module.exports = Colors;
+
+/*  ------------------------------------------------------------------------ */
+
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,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M0IsQ0FBZjs7QUFFQTs7QUFFQSxPQUFPLEdBQVAsR0FBYTs7QUFFVCxXQUFjLENBQUMsQ0FBRCxFQUFRLENBQVIsRUFBYSxDQUFiLENBRkw7QUFHVCxjQUFjLENBQUMsR0FBRCxFQUFNLEdBQU4sRUFBVyxHQUFYLENBSEw7QUFJVCxlQUFjLENBQUMsR0FBRCxFQUFNLEdBQU4sRUFBVyxHQUFYLENBSkw7QUFLVCxXQUFjLENBQUMsR0FBRCxFQUFNLEdBQU4sRUFBVyxHQUFYLENBTEw7O0FBT1QsU0FBYyxDQUFDLEdBQUQsRUFBUSxDQUFSLEVBQWEsQ0FBYixDQVBMO0FBUVQsY0FBYyxDQUFDLEdBQUQsRUFBTyxFQUFQLEVBQWEsQ0FBYixDQVJMOztBQVVULFdBQWMsQ0FBQyxDQUFELEVBQU0sR0FBTixFQUFhLENBQWIsQ0FWTDtBQVdULGdCQUFjLENBQUMsRUFBRCxFQUFNLEdBQU4sRUFBWSxFQUFaLENBWEw7O0FBYVQsWUFBYyxDQUFDLEdBQUQsRUFBTSxHQUFOLEVBQWEsQ0FBYixDQWJMO0FBY1QsaUJBQWMsQ0FBQyxHQUFELEVBQU0sR0FBTixFQUFZLEVBQVosQ0FkTDs7QUFnQlQsVUFBYyxDQUFDLENBQUQsRUFBUSxDQUFSLEVBQVcsR0FBWCxDQWhCTDtBQWlCVCxlQUFjLENBQUMsRUFBRCxFQUFNLEdBQU4sRUFBVyxHQUFYLENBakJMOztBQW1CVCxhQUFjLENBQUMsR0FBRCxFQUFRLENBQVIsRUFBVyxHQUFYLENBbkJMO0FBb0JULGtCQUFjLENBQUMsR0FBRCxFQUFRLENBQVIsRUFBVyxHQUFYLENBcEJMOztBQXNCVCxVQUFjLENBQUMsQ0FBRCxFQUFNLEdBQU4sRUFBVyxHQUFYLENBdEJMO0FBdUJULGVBQWMsQ0FBQyxDQUFELEVBQU0sR0FBTixFQUFXLEdBQVg7O0FBR2xCOztBQTFCYSxDQUFiLENBNEJBLE9BQU8sT0FBUCxHQUFpQixNQUFqQjs7QUFFQSIsImZpbGUiOiJhbnNpY29sb3IuanMiLCJzb3VyY2VzQ29udGVudCI6WyJcInVzZSBzdHJpY3RcIjtcblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG5jb25zdCBPID0gT2JqZWN0XG5cbi8qICBTZWUgaHR0cHM6Ly9taXNjLmZsb2dpc29mdC5jb20vYmFzaC90aXBfY29sb3JzX2FuZF9mb3JtYXR0aW5nXG4gICAgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovXG5cbmNvbnN0IGNvbG9yQ29kZXMgICAgICA9IFsgICAnYmxhY2snLCAgICAgICdyZWQnLCAgICAgICdncmVlbicsICAgICAgJ3llbGxvdycsICAgICAgJ2JsdWUnLCAgICAgICdtYWdlbnRhJywgICAgICAnY3lhbicsICdsaWdodEdyYXknLCAnJywgJ2RlZmF1bHQnXVxuICAgICwgY29sb3JDb2Rlc0xpZ2h0ID0gWydkYXJrR3JheScsICdsaWdodFJlZCcsICdsaWdodEdyZWVuJywgJ2xpZ2h0WWVsbG93JywgJ2xpZ2h0Qmx1ZScsICdsaWdodE1hZ2VudGEnLCAnbGlnaHRDeWFuJywgJ3doaXRlJywgJyddXG4gICAgXG4gICAgLCBzdHlsZUNvZGVzID0gWycnLCAnYnJpZ2h0JywgJ2RpbScsICdpdGFsaWMnLCAndW5kZXJsaW5lJywgJycsICcnLCAnaW52ZXJzZSddXG5cbiAgICAsIGFzQnJpZ2h0ID0geyAncmVkJzogICAgICAgJ2xpZ2h0UmVkJyxcbiAgICAgICAgICAgICAgICAgICAnZ3JlZW4nOiAgICAgJ2xpZ2h0R3JlZW4nLFxuICAgICAgICAgICAgICAgICAgICd5ZWxsb3cnOiAgICAnbGlnaHRZZWxsb3cnLFxuICAgICAgICAgICAgICAgICAgICdibHVlJzogICAgICAnbGlnaHRCbHVlJyxcbiAgICAgICAgICAgICAgICAgICAnbWFnZW50YSc6ICAgJ2xpZ2h0TWFnZW50YScsXG4gICAgICAgICAgICAgICAgICAgJ2N5YW4nOiAgICAgICdsaWdodEN5YW4nLFxuICAgICAgICAgICAgICAgICAgICdibGFjayc6ICAgICAnZGFya0dyYXknLFxuICAgICAgICAgICAgICAgICAgICdsaWdodEdyYXknOiAnd2hpdGUnIH1cbiAgICBcbiAgICAsIHR5cGVzID0geyAwOiAgJ3N0eWxlJyxcbiAgICAgICAgICAgICAgICAyOiAgJ3Vuc3R5bGUnLFxuICAgICAgICAgICAgICAgIDM6ICAnY29sb3InLFxuICAgICAgICAgICAgICAgIDk6ICAnY29sb3JMaWdodCcsXG4gICAgICAgICAgICAgICAgNDogICdiZ0NvbG9yJyxcbiAgICAgICAgICAgICAgICAxMDogJ2JnQ29sb3JMaWdodCcgfVxuXG4gICAgLCBzdWJ0eXBlcyA9IHsgIGNvbG9yOiAgICAgICAgIGNvbG9yQ29kZXMsXG4gICAgICAgICAgICAgICAgICAgIGNvbG9yTGlnaHQ6ICAgIGNvbG9yQ29kZXNMaWdodCxcbiAgICAgICAgICAgICAgICAgICAgYmdDb2xvcjogICAgICAgY29sb3JDb2RlcyxcbiAgICAgICAgICAgICAgICAgICAgYmdDb2xvckxpZ2h0OiAgY29sb3JDb2Rlc0xpZ2h0LFxuICAgICAgICAgICAgICAgICAgICBzdHlsZTogICAgICAgICBzdHlsZUNvZGVzLFxuICAgICAgICAgICAgICAgICAgICB1bnN0eWxlOiAgICAgICBzdHlsZUNvZGVzICAgIH1cblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG5jb25zdCBjbGVhbiA9IG9iaiA9PiB7XG4gICAgICAgICAgICAgICAgZm9yIChjb25zdCBrIGluIG9iaikgeyBpZiAoIW9ialtrXSkgeyBkZWxldGUgb2JqW2tdIH0gfVxuICAgICAgICAgICAgICAgIHJldHVybiAoTy5rZXlzIChvYmopLmxlbmd0aCA9PT0gMCkgPyB1bmRlZmluZWQgOiBvYmpcbiAgICAgICAgICAgIH1cblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG5jbGFzcyBDb2xvciB7XG5cbiAgICBjb25zdHJ1Y3RvciAoYmFja2dyb3VuZCwgbmFtZSwgYnJpZ2h0bmVzcykge1xuXG4gICAgICAgIHRoaXMuYmFja2dyb3VuZCA9IGJhY2tncm91bmRcbiAgICAgICAgdGhpcy5uYW1lICAgICAgID0gbmFtZVxuICAgICAgICB0aGlzLmJyaWdodG5lc3MgPSBicmlnaHRuZXNzXG4gICAgfVxuXG4gICAgZ2V0IGludmVyc2UgKCkge1xuICAgICAgICByZXR1cm4gbmV3IENvbG9yICghdGhpcy5iYWNrZ3JvdW5kLCB0aGlzLm5hbWUgfHwgKHRoaXMuYmFja2dyb3VuZCA/ICdibGFjaycgOiAnd2hpdGUnKSwgdGhpcy5icmlnaHRuZXNzKVxuICAgIH1cblxuICAgIGdldCBjbGVhbiAoKSB7XG4gICAgICAgIHJldHVybiBjbGVhbiAoeyBuYW1lOiAgIHRoaXMubmFtZSA9PT0gJ2RlZmF1bHQnID8gJycgOiB0aGlzLm5hbWUsXG4gICAgICAgICAgICAgICAgICAgICAgICBicmlnaHQ6IHRoaXMuYnJpZ2h0bmVzcyA9PT0gQ29kZS5icmlnaHQsXG4gICAgICAgICAgICAgICAgICAgICAgICBkaW06ICAgIHRoaXMuYnJpZ2h0bmVzcyA9PT0gQ29kZS5kaW0gfSlcbiAgICB9XG5cbiAgICBkZWZhdWx0QnJpZ2h0bmVzcyAodmFsdWUpIHtcblxuICAgICAgICByZXR1cm4gbmV3IENvbG9yICh0aGlzLmJhY2tncm91bmQsIHRoaXMubmFtZSwgdGhpcy5icmlnaHRuZXNzIHx8IHZhbHVlKVxuICAgIH1cblxuICAgIGNzcyAoaW52ZXJ0ZWQpIHtcblxuICAgICAgICBjb25zdCBjb2xvciA9IGludmVydGVkID8gdGhpcy5pbnZlcnNlIDogdGhpc1xuXG4gICAgICAgIGNvbnN0IHJnYk5hbWUgPSAoKGNvbG9yLmJyaWdodG5lc3MgPT09IENvZGUuYnJpZ2h0KSAmJiBhc0JyaWdodFtjb2xvci5uYW1lXSkgfHwgY29sb3IubmFtZVxuXG4gICAgICAgIGNvbnN0IHByb3AgPSAoY29sb3IuYmFja2dyb3VuZCA/ICdiYWNrZ3JvdW5kOicgOiAnY29sb3I6JylcbiAgICAgICAgICAgICwgcmdiICA9IENvbG9ycy5yZ2JbcmdiTmFtZV1cbiAgICAgICAgICAgICwgYWxwaGEgPSAodGhpcy5icmlnaHRuZXNzID09PSBDb2RlLmRpbSkgPyAwLjUgOiAxXG5cbiAgICAgICAgcmV0dXJuIHJnYlxuICAgICAgICAgICAgICAgID8gKHByb3AgKyAncmdiYSgnICsgWy4uLnJnYiwgYWxwaGFdLmpvaW4gKCcsJykgKyAnKTsnKVxuICAgICAgICAgICAgICAgIDogKCghY29sb3IuYmFja2dyb3VuZCAmJiAoYWxwaGEgPCAxKSkgPyAnY29sb3I6cmdiYSgwLDAsMCwwLjUpOycgOiAnJykgLy8gQ2hyb21lIGRvZXMgbm90IHN1cHBvcnQgJ29wYWNpdHknIHByb3BlcnR5Li4uXG4gICAgfVxufVxuXG4vKiAgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovXG5cbmNsYXNzIENvZGUge1xuXG4gICAgY29uc3RydWN0b3IgKG4pIHtcbiAgICAgICAgaWYgKG4gIT09IHVuZGVmaW5lZCkgeyB0aGlzLnZhbHVlID0gTnVtYmVyIChuKSB9IH1cblxuICAgIGdldCB0eXBlICgpIHtcbiAgICAgICByZXR1cm4gdHlwZXNbTWF0aC5mbG9vciAodGhpcy52YWx1ZSAvIDEwKV0gfVxuXG4gICAgZ2V0IHN1YnR5cGUgKCkge1xuICAgICAgICByZXR1cm4gc3VidHlwZXNbdGhpcy50eXBlXVt0aGlzLnZhbHVlICUgMTBdIH1cblxuICAgIGdldCBzdHIgKCkge1xuICAgICAgICByZXR1cm4gKHRoaXMudmFsdWUgPyAoJ1xcdTAwMWJcXFsnICsgdGhpcy52YWx1ZSArICdtJykgOiAnJykgfVxuXG4gICAgc3RhdGljIHN0ciAoeCkge1xuICAgICAgICByZXR1cm4gbmV3IENvZGUgKHgpLnN0ciB9XG5cbiAgICBnZXQgaXNCcmlnaHRuZXNzICgpIHtcbiAgICAgICAgcmV0dXJuICh0aGlzLnZhbHVlID09PSBDb2RlLm5vQnJpZ2h0bmVzcykgfHwgKHRoaXMudmFsdWUgPT09IENvZGUuYnJpZ2h0KSB8fCAodGhpcy52YWx1ZSA9PT0gQ29kZS5kaW0pIH1cbn1cblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG5PLmFzc2lnbiAoQ29kZSwge1xuXG4gICAgcmVzZXQ6ICAgICAgICAwLFxuICAgIGJyaWdodDogICAgICAgMSxcbiAgICBkaW06ICAgICAgICAgIDIsXG4gICAgaW52ZXJzZTogICAgICA3LFxuICAgIG5vQnJpZ2h0bmVzczogMjIsXG4gICAgbm9JdGFsaWM6ICAgICAyMyxcbiAgICBub1VuZGVybGluZTogIDI0LFxuICAgIG5vSW52ZXJzZTogICAgMjcsXG4gICAgbm9Db2xvcjogICAgICAzOSxcbiAgICBub0JnQ29sb3I6ICAgIDQ5XG59KVxuXG4vKiAgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovXG5cbmNvbnN0IHJlcGxhY2VBbGwgPSAoc3RyLCBhLCBiKSA9PiBzdHIuc3BsaXQgKGEpLmpvaW4gKGIpXG5cbi8qICBBTlNJIGJyaWdodG5lc3MgY29kZXMgZG8gbm90IG92ZXJsYXAsIGUuZy4gXCJ7YnJpZ2h0fXtkaW19Zm9vXCIgd2lsbCBiZSByZW5kZXJlZCBicmlnaHQgKG5vdCBkaW0pLlxuICAgIFNvIHdlIGZpeCBpdCBieSBhZGRpbmcgYnJpZ2h0bmVzcyBjYW5jZWxpbmcgYmVmb3JlIGVhY2ggYnJpZ2h0bmVzcyBjb2RlLCBzbyB0aGUgZm9ybWVyIGV4YW1wbGUgZ2V0c1xuICAgIGNvbnZlcnRlZCB0byBcIntub0JyaWdodG5lc3N9e2JyaWdodH17bm9CcmlnaHRuZXNzfXtkaW19Zm9vXCIg4oCTIHRoaXMgd2F5IGl0IGdldHMgcmVuZGVyZWQgYXMgZXhwZWN0ZWQuXG4gKi9cblxuY29uc3QgZGVub3JtYWxpemVCcmlnaHRuZXNzID0gcyA9PiBzLnJlcGxhY2UgKC8oXFx1MDAxYlxcWygxfDIpbSkvZywgJ1xcdTAwMWJbMjJtJDEnKVxuY29uc3Qgbm9ybWFsaXplQnJpZ2h0bmVzcyA9IHMgPT4gcy5yZXBsYWNlICgvXFx1MDAxYlxcWzIybShcXHUwMDFiXFxbKDF8MiltKS9nLCAnJDEnKVxuXG5jb25zdCB3cmFwID0gKHgsIG9wZW5Db2RlLCBjbG9zZUNvZGUpID0+IHtcblxuICAgIGNvbnN0IG9wZW4gID0gQ29kZS5zdHIgKG9wZW5Db2RlKSxcbiAgICAgICAgICBjbG9zZSA9IENvZGUuc3RyIChjbG9zZUNvZGUpXG5cbiAgICByZXR1cm4gU3RyaW5nICh4KVxuICAgICAgICAgICAgICAgIC5zcGxpdCAoJ1xcbicpXG4gICAgICAgICAgICAgICAgLm1hcCAobGluZSA9PiBkZW5vcm1hbGl6ZUJyaWdodG5lc3MgKG9wZW4gKyByZXBsYWNlQWxsIChub3JtYWxpemVCcmlnaHRuZXNzIChsaW5lKSwgY2xvc2UsIG9wZW4pICsgY2xvc2UpKVxuICAgICAgICAgICAgICAgIC5qb2luICgnXFxuJylcbn1cblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG5jb25zdCBjYW1lbCA9IChhLCBiKSA9PiBhICsgYi5jaGFyQXQgKDApLnRvVXBwZXJDYXNlICgpICsgYi5zbGljZSAoMSlcblxuXG5jb25zdCBzdHJpbmdXcmFwcGluZ01ldGhvZHMgPSAoKCkgPT4gW1xuXG4gICAgICAgIC4uLmNvbG9yQ29kZXMubWFwICgoaywgaSkgPT4gIWsgPyBbXSA6IFsgLy8gY29sb3IgbWV0aG9kc1xuXG4gICAgICAgICAgICBbaywgICAgICAgICAgICAgICAzMCArIGksIENvZGUubm9Db2xvcl0sXG4gICAgICAgICAgICBbY2FtZWwgKCdiZycsIGspLCA0MCArIGksIENvZGUubm9CZ0NvbG9yXSxcbiAgICAgICAgXSksXG5cbiAgICAgICAgLi4uY29sb3JDb2Rlc0xpZ2h0Lm1hcCAoKGssIGkpID0+ICFrID8gW10gOiBbIC8vIGxpZ2h0IGNvbG9yIG1ldGhvZHNcbiAgICAgICAgICAgIFxuICAgICAgICAgICAgW2ssICAgICAgICAgICAgICAgIDkwICsgaSwgQ29kZS5ub0NvbG9yXSxcbiAgICAgICAgICAgIFtjYW1lbCAoJ2JnJywgayksIDEwMCArIGksIENvZGUubm9CZ0NvbG9yXSxcbiAgICAgICAgXSksXG5cbiAgICAgICAgLyogVEhJUyBPTkUgSVMgRk9SIEJBQ0tXQVJEUyBDT01QQVRJQklMSVRZIFdJVEggUFJFVklPVVMgVkVSU0lPTlMgKGhhZCAnYnJpZ2h0JyBpbnN0ZWFkIG9mICdsaWdodCcgZm9yIGJhY2tncm91bmRzKVxuICAgICAgICAgKi9cbiAgICAgICAgLi4uWycnLCAnQnJpZ2h0UmVkJywgJ0JyaWdodEdyZWVuJywgJ0JyaWdodFllbGxvdycsICdCcmlnaHRCbHVlJywgJ0JyaWdodE1hZ2VudGEnLCAnQnJpZ2h0Q3lhbiddLm1hcCAoKGssIGkpID0+ICFrID8gW10gOiBbXG4gICAgICAgICAgICBcbiAgICAgICAgICAgIFsnYmcnICsgaywgMTAwICsgaSwgQ29kZS5ub0JnQ29sb3JdLFxuICAgICAgICBdKSxcbiAgICAgICAgXG4gICAgICAgIC4uLnN0eWxlQ29kZXMubWFwICgoaywgaSkgPT4gIWsgPyBbXSA6IFsgLy8gc3R5bGUgbWV0aG9kc1xuXG4gICAgICAgICAgICBbaywgaSwgKChrID09PSAnYnJpZ2h0JykgfHwgKGsgPT09ICdkaW0nKSkgPyBDb2RlLm5vQnJpZ2h0bmVzcyA6ICgyMCArIGkpXVxuICAgICAgICBdKVxuICAgIF1cbiAgICAucmVkdWNlICgoYSwgYikgPT4gYS5jb25jYXQgKGIpKVxuICAgIFxuKSAoKTtcblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG5jb25zdCBhc3NpZ25TdHJpbmdXcmFwcGluZ0FQSSA9ICh0YXJnZXQsIHdyYXBCZWZvcmUgPSB0YXJnZXQpID0+XG5cbiAgICBzdHJpbmdXcmFwcGluZ01ldGhvZHMucmVkdWNlICgobWVtbywgW2ssIG9wZW4sIGNsb3NlXSkgPT5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBPLmRlZmluZVByb3BlcnR5IChtZW1vLCBrLCB7XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGdldDogKCkgPT4gYXNzaWduU3RyaW5nV3JhcHBpbmdBUEkgKHN0ciA9PiB3cmFwQmVmb3JlICh3cmFwIChzdHIsIG9wZW4sIGNsb3NlKSkpXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfSksXG5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICB0YXJnZXQpXG5cbi8qICAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0gKi9cblxuY29uc3QgVEVYVCAgICA9IDAsXG4gICAgICBCUkFDS0VUID0gMSxcbiAgICAgIENPREUgICAgPSAyXG5cbmZ1bmN0aW9uIHJhd1BhcnNlIChzKSB7XG4gICAgXG4gICAgbGV0IHN0YXRlID0gVEVYVCwgYnVmZmVyID0gJycsIHRleHQgPSAnJywgY29kZSA9ICcnLCBjb2RlcyA9IFtdXG4gICAgbGV0IHNwYW5zID0gW11cblxuICAgIGZvciAobGV0IGkgPSAwLCBuID0gcy5sZW5ndGg7IGkgPCBuOyBpKyspIHtcblxuICAgICAgICBjb25zdCBjID0gc1tpXVxuXG4gICAgICAgIGJ1ZmZlciArPSBjXG5cbiAgICAgICAgc3dpdGNoIChzdGF0ZSkge1xuXG4gICAgICAgICAgICBjYXNlIFRFWFQ6XG4gICAgICAgICAgICAgICAgaWYgKGMgPT09ICdcXHUwMDFiJykgeyBzdGF0ZSA9IEJSQUNLRVQ7IGJ1ZmZlciA9IGM7IH1cbiAgICAgICAgICAgICAgICBlbHNlICAgICAgICAgICAgICAgIHsgdGV4dCArPSBjIH1cbiAgICAgICAgICAgICAgICBicmVha1xuXG4gICAgICAgICAgICBjYXNlIEJSQUNLRVQ6XG4gICAgICAgICAgICAgICAgaWYgKGMgPT09ICdbJykgeyBzdGF0ZSA9IENPREU7IGNvZGUgPSAnJzsgY29kZXMgPSBbXSB9XG4gICAgICAgICAgICAgICAgZWxzZSAgICAgICAgICAgeyBzdGF0ZSA9IFRFWFQ7IHRleHQgKz0gYnVmZmVyIH1cbiAgICAgICAgICAgICAgICBicmVha1xuXG4gICAgICAgICAgICBjYXNlIENPREU6XG5cbiAgICAgICAgICAgICAgICBpZiAoKGMgPj0gJzAnKSAmJiAoYyA8PSAnOScpKSAgICAgICAgeyBjb2RlICs9IGMgfVxuICAgICAgICAgICAgICAgIGVsc2UgaWYgKGMgPT09ICc7JykgICAgICAgICAgICAgICAgICB7IGNvZGVzLnB1c2ggKG5ldyBDb2RlIChjb2RlKSk7IGNvZGUgPSAnJyB9XG4gICAgICAgICAgICAgICAgZWxzZSBpZiAoKGMgPT09ICdtJykgJiYgY29kZS5sZW5ndGgpIHsgY29kZXMucHVzaCAobmV3IENvZGUgKGNvZGUpKVxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGZvciAoY29uc3QgY29kZSBvZiBjb2RlcykgeyBzcGFucy5wdXNoICh7IHRleHQsIGNvZGUgfSk7IHRleHQgPSAnJyB9XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgc3RhdGUgPSBURVhUXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIH1cbiAgICAgICAgICAgICAgICBlbHNlICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgeyBzdGF0ZSA9IFRFWFQ7IHRleHQgKz0gYnVmZmVyIH1cbiAgICAgICAgfVxuICAgIH1cblxuICAgIGlmIChzdGF0ZSAhPT0gVEVYVCkgdGV4dCArPSBidWZmZXJcblxuICAgIGlmICh0ZXh0KSBzcGFucy5wdXNoICh7IHRleHQsIGNvZGU6IG5ldyBDb2RlICgpIH0pXG5cbiAgICByZXR1cm4gc3BhbnNcbn1cblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG4vKipcbiAqIFJlcHJlc2VudHMgYW4gQU5TSS1lc2NhcGVkIHN0cmluZy5cbiAqL1xuY2xhc3MgQ29sb3JzIHtcblxuICAgIC8qKlxuICAgICAqIEBwYXJhbSB7c3RyaW5nfSBzIGEgc3RyaW5nIGNvbnRhaW5pbmcgQU5TSSBlc2NhcGUgY29kZXMuXG4gICAgICovXG4gICAgY29uc3RydWN0b3IgKHMpIHtcblxuICAgICAgICB0aGlzLnNwYW5zID0gcyA/IHJhd1BhcnNlIChzKSA6IFtdXG4gICAgfVxuXG4gICAgZ2V0IHN0ciAoKSB7XG4gICAgICAgIHJldHVybiB0aGlzLnNwYW5zLnJlZHVjZSAoKHN0ciwgcCkgPT4gc3RyICsgcC50ZXh0ICsgcC5jb2RlLnN0ciwgJycpXG4gICAgfVxuXG4gICAgZ2V0IHBhcnNlZCAoKSB7XG5cbiAgICAgICAgbGV0IGNvbG9yLCBiZ0NvbG9yLCBicmlnaHRuZXNzLCBzdHlsZXNcblxuICAgICAgICBmdW5jdGlvbiByZXNldCAoKSB7XG5cbiAgICAgICAgICAgIGNvbG9yICAgICAgPSBuZXcgQ29sb3IgKCksXG4gICAgICAgICAgICBiZ0NvbG9yICAgID0gbmV3IENvbG9yICh0cnVlIC8qIGJhY2tncm91bmQgKi8pLFxuICAgICAgICAgICAgYnJpZ2h0bmVzcyA9IHVuZGVmaW5lZCxcbiAgICAgICAgICAgIHN0eWxlcyAgICAgPSBuZXcgU2V0ICgpXG4gICAgICAgIH1cblxuICAgICAgICByZXNldCAoKVxuXG4gICAgICAgIHJldHVybiBPLmFzc2lnbiAobmV3IENvbG9ycyAoKSwge1xuXG4gICAgICAgICAgICBzcGFuczogdGhpcy5zcGFucy5tYXAgKHNwYW4gPT4ge1xuXG4gICAgICAgICAgICAgICAgY29uc3QgYyA9IHNwYW4uY29kZVxuXG4gICAgICAgICAgICAgICAgY29uc3QgaW52ZXJ0ZWQgID0gc3R5bGVzLmhhcyAoJ2ludmVyc2UnKSxcbiAgICAgICAgICAgICAgICAgICAgICB1bmRlcmxpbmUgPSBzdHlsZXMuaGFzICgndW5kZXJsaW5lJykgICA/ICd0ZXh0LWRlY29yYXRpb246IHVuZGVybGluZTsnIDogJycsICAgICAgICAgICAgICAgICAgICAgIFxuICAgICAgICAgICAgICAgICAgICAgIGl0YWxpYyAgICA9IHN0eWxlcy5oYXMgKCdpdGFsaWMnKSAgICAgID8gJ2ZvbnQtc3R5bGU6IGl0YWxpYzsnIDogJycsXG4gICAgICAgICAgICAgICAgICAgICAgYm9sZCAgICAgID0gYnJpZ2h0bmVzcyA9PT0gQ29kZS5icmlnaHQgPyAnZm9udC13ZWlnaHQ6IGJvbGQ7JyA6ICcnXG5cbiAgICAgICAgICAgICAgICBjb25zdCBmb3JlQ29sb3IgPSBjb2xvci5kZWZhdWx0QnJpZ2h0bmVzcyAoYnJpZ2h0bmVzcylcblxuICAgICAgICAgICAgICAgIGNvbnN0IHN0eWxlZFNwYW4gPSBPLmFzc2lnbiAoXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgeyBjc3M6IGJvbGQgKyBpdGFsaWMgKyB1bmRlcmxpbmUgKyBmb3JlQ29sb3IuY3NzIChpbnZlcnRlZCkgKyBiZ0NvbG9yLmNzcyAoaW52ZXJ0ZWQpIH0sXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgY2xlYW4gKHsgYm9sZDogISFib2xkLCBjb2xvcjogZm9yZUNvbG9yLmNsZWFuLCBiZ0NvbG9yOiBiZ0NvbG9yLmNsZWFuIH0pLFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIHNwYW4pXG5cbiAgICAgICAgICAgICAgICBmb3IgKGNvbnN0IGsgb2Ygc3R5bGVzKSB7IHN0eWxlZFNwYW5ba10gPSB0cnVlIH1cblxuICAgICAgICAgICAgICAgIGlmIChjLmlzQnJpZ2h0bmVzcykge1xuXG4gICAgICAgICAgICAgICAgICAgIGJyaWdodG5lc3MgPSBjLnZhbHVlXG4gICAgICAgICAgICAgICAgXG4gICAgICAgICAgICAgICAgfSBlbHNlIGlmIChzcGFuLmNvZGUudmFsdWUgIT09IHVuZGVmaW5lZCkge1xuXG4gICAgICAgICAgICAgICAgICAgIGlmIChzcGFuLmNvZGUudmFsdWUgPT09IENvZGUucmVzZXQpIHtcbiAgICAgICAgICAgICAgICAgICAgICAgIHJlc2V0ICgpXG5cbiAgICAgICAgICAgICAgICAgICAgfSBlbHNlIHtcblxuICAgICAgICAgICAgICAgICAgICAgICAgc3dpdGNoIChzcGFuLmNvZGUudHlwZSkge1xuXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgY2FzZSAnY29sb3InICAgICAgICA6XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgY2FzZSAnY29sb3JMaWdodCcgICA6IGNvbG9yICAgPSBuZXcgQ29sb3IgKGZhbHNlLCBjLnN1YnR5cGUpOyBicmVha1xuXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgY2FzZSAnYmdDb2xvcicgICAgICA6XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgY2FzZSAnYmdDb2xvckxpZ2h0JyA6IGJnQ29sb3IgPSBuZXcgQ29sb3IgKHRydWUsICBjLnN1YnR5cGUpOyBicmVha1xuXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgY2FzZSAnc3R5bGUnICA6IHN0eWxlcy5hZGQgICAgKGMuc3VidHlwZSk7IGJyZWFrXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgY2FzZSAndW5zdHlsZSc6IHN0eWxlcy5kZWxldGUgKGMuc3VidHlwZSk7IGJyZWFrXG4gICAgICAgICAgICAgICAgICAgICAgICB9XG4gICAgICAgICAgICAgICAgICAgIH1cbiAgICAgICAgICAgICAgICB9XG5cbiAgICAgICAgICAgICAgICByZXR1cm4gc3R5bGVkU3BhblxuXG4gICAgICAgICAgICB9KS5maWx0ZXIgKHMgPT4gcy50ZXh0Lmxlbmd0aCA+IDApXG4gICAgICAgIH0pXG4gICAgfVxuXG4vKiAgT3V0cHV0cyB3aXRoIENocm9tZSBEZXZUb29scy1jb21wYXRpYmxlIGZvcm1hdCAgICAgKi9cblxuICAgIGdldCBhc0Nocm9tZUNvbnNvbGVMb2dBcmd1bWVudHMgKCkge1xuXG4gICAgICAgIGNvbnN0IHNwYW5zID0gdGhpcy5wYXJzZWQuc3BhbnNcblxuICAgICAgICByZXR1cm4gW3NwYW5zLm1hcCAocyA9PiAoJyVjJyArIHMudGV4dCkpLmpvaW4gKCcnKSxcbiAgICAgICAgICAgICAuLi5zcGFucy5tYXAgKHMgPT4gcy5jc3MpXVxuICAgIH1cblxuICAgIGdldCBicm93c2VyQ29uc29sZUFyZ3VtZW50cyAoKSAvKiBMRUdBQ1ksIERFUFJFQ0FURUQgKi8geyByZXR1cm4gdGhpcy5hc0Nocm9tZUNvbnNvbGVMb2dBcmd1bWVudHMgfVxuXG4gICAgLyoqXG4gICAgICogQGRlc2MgaW5zdGFsbHMgU3RyaW5nIHByb3RvdHlwZSBleHRlbnNpb25zXG4gICAgICogQGV4YW1wbGVcbiAgICAgKiByZXF1aXJlICgnYW5zaWNvbG9yJykubmljZVxuICAgICAqIGNvbnNvbGUubG9nICgnZm9vJy5icmlnaHQucmVkKVxuICAgICAqL1xuICAgIHN0YXRpYyBnZXQgbmljZSAoKSB7XG5cbiAgICAgICAgQ29sb3JzLm5hbWVzLmZvckVhY2ggKGsgPT4ge1xuICAgICAgICAgICAgaWYgKCEoayBpbiBTdHJpbmcucHJvdG90eXBlKSkge1xuICAgICAgICAgICAgICAgIE8uZGVmaW5lUHJvcGVydHkgKFN0cmluZy5wcm90b3R5cGUsIGssIHsgZ2V0OiBmdW5jdGlvbiAoKSB7IHJldHVybiBDb2xvcnNba10gKHRoaXMpIH0gfSlcbiAgICAgICAgICAgIH1cbiAgICAgICAgfSlcblxuICAgICAgICByZXR1cm4gQ29sb3JzXG4gICAgfVxuXG4gICAgLyoqXG4gICAgICogQGRlc2MgcGFyc2VzIGEgc3RyaW5nIGNvbnRhaW5pbmcgQU5TSSBlc2NhcGUgY29kZXNcbiAgICAgKiBAcmV0dXJuIHtDb2xvcnN9IHBhcnNlZCByZXByZXNlbnRhdGlvbi5cbiAgICAgKi9cbiAgICBzdGF0aWMgcGFyc2UgKHMpIHtcbiAgICAgICAgcmV0dXJuIG5ldyBDb2xvcnMgKHMpLnBhcnNlZFxuICAgIH1cblxuICAgIC8qKlxuICAgICAqIEBkZXNjIHN0cmlwcyBBTlNJIGNvZGVzIGZyb20gYSBzdHJpbmdcbiAgICAgKiBAcGFyYW0ge3N0cmluZ30gcyBhIHN0cmluZyBjb250YWluaW5nIEFOU0kgZXNjYXBlIGNvZGVzLlxuICAgICAqIEByZXR1cm4ge3N0cmluZ30gY2xlYW4gc3RyaW5nLlxuICAgICAqL1xuICAgIHN0YXRpYyBzdHJpcCAocykge1xuICAgICAgICByZXR1cm4gcy5yZXBsYWNlICgvW1xcdTAwMWJcXHUwMDliXVtbKCkjOz9dKig/OlswLTldezEsNH0oPzo7WzAtOV17MCw0fSkqKT9bMC05QS1QUlpjZi1ucXJ5PT48XS9nLCAnJykgLy8gaG9wZSBWOCBjYWNoZXMgdGhlIHJlZ2V4cFxuICAgIH1cblxuICAgIC8qKlxuICAgICAqIEBleGFtcGxlXG4gICAgICogY29uc3Qgc3BhbnMgPSBbLi4uYW5zaS5wYXJzZSAoJ1xcdTAwMWJbN21cXHUwMDFiWzdtZm9vXFx1MDAxYls3bWJhclxcdTAwMWJbMjdtJyldXG4gICAgICovXG4gICAgW1N5bWJvbC5pdGVyYXRvcl0gKCkge1xuICAgICAgICByZXR1cm4gdGhpcy5zcGFuc1tTeW1ib2wuaXRlcmF0b3JdICgpXG4gICAgfVxufVxuXG4vKiAgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovXG5cbmFzc2lnblN0cmluZ1dyYXBwaW5nQVBJIChDb2xvcnMsIHN0ciA9PiBzdHIpXG5cbi8qICAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0gKi9cblxuQ29sb3JzLm5hbWVzID0gc3RyaW5nV3JhcHBpbmdNZXRob2RzLm1hcCAoKFtrXSkgPT4gaylcblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG5Db2xvcnMucmdiID0ge1xuXG4gICAgYmxhY2s6ICAgICAgICBbMCwgICAgIDAsICAgMF0sICAgIFxuICAgIGRhcmtHcmF5OiAgICAgWzEwMCwgMTAwLCAxMDBdLFxuICAgIGxpZ2h0R3JheTogICAgWzIwMCwgMjAwLCAyMDBdLFxuICAgIHdoaXRlOiAgICAgICAgWzI1NSwgMjU1LCAyNTVdLFxuXG4gICAgcmVkOiAgICAgICAgICBbMjA0LCAgIDAsICAgMF0sXG4gICAgbGlnaHRSZWQ6ICAgICBbMjU1LCAgNTEsICAgMF0sXG4gICAgXG4gICAgZ3JlZW46ICAgICAgICBbMCwgICAyMDQsICAgMF0sXG4gICAgbGlnaHRHcmVlbjogICBbNTEsICAyMDQsICA1MV0sXG4gICAgXG4gICAgeWVsbG93OiAgICAgICBbMjA0LCAxMDIsICAgMF0sXG4gICAgbGlnaHRZZWxsb3c6ICBbMjU1LCAxNTMsICA1MV0sXG4gICAgXG4gICAgYmx1ZTogICAgICAgICBbMCwgICAgIDAsIDI1NV0sXG4gICAgbGlnaHRCbHVlOiAgICBbMjYsICAxNDAsIDI1NV0sXG4gICAgXG4gICAgbWFnZW50YTogICAgICBbMjA0LCAgIDAsIDIwNF0sXG4gICAgbGlnaHRNYWdlbnRhOiBbMjU1LCAgIDAsIDI1NV0sXG4gICAgXG4gICAgY3lhbjogICAgICAgICBbMCwgICAxNTMsIDI1NV0sXG4gICAgbGlnaHRDeWFuOiAgICBbMCwgICAyMDQsIDI1NV0sXG59XG5cbi8qICAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0gKi9cblxubW9kdWxlLmV4cG9ydHMgPSBDb2xvcnNcblxuLyogIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqL1xuXG4iXX0=
 
 /***/ }),
 
@@ -73573,6 +74942,72 @@ __webpack_require__("./resources/js/app/root.js");
 
 /***/ }),
 
+/***/ "./resources/js/app/actions/stream.js":
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _require = __webpack_require__("./node_modules/axios/index.js"),
+    get = _require.get;
+
+var STREAM_TYPES = {
+	'OPEN_STREAM': 'STREAM@OPEN_STREAM',
+	'CLOSE_STREAM': 'STREAM@CLOSE_STREAM',
+	'UPDATE_STREAM': 'STREAM@UPDATE_STREAM',
+	'UPDATE_STREAM_COMPLETE': 'STREAM@UPDATE_STREAM_COMPLETE'
+};
+
+var openStream = function openStream(id) {
+	return function (dispatch) {
+		dispatch({
+			type: STREAM_TYPES.OPEN_STREAM,
+			id: id
+		});
+
+		dispatch(updateStream(id));
+	};
+};
+
+var closeStream = function closeStream(id) {
+	return {
+		type: STREAM_TYPES.CLOSE_STREAM,
+		id: id
+	};
+};
+
+var updateStream = function updateStream(id) {
+	return function (dispatch) {
+		dispatch({
+			type: STREAM_TYPES.UPDATE_STREAM,
+			id: id
+		});
+
+		get('/api/logs/' + id).then(function (response) {
+			var data = response.data;
+
+			dispatch({
+				type: STREAM_TYPES.UPDATE_STREAM_COMPLETE,
+				id: id,
+				content: data
+			});
+		})
+		// eslint-disable-next-line
+		.catch(function (e) {
+			return console.error(e);
+		});
+	};
+};
+
+module.exports = {
+	openStream: openStream,
+	closeStream: closeStream,
+	updateStream: updateStream,
+	STREAM_TYPES: STREAM_TYPES
+};
+
+/***/ }),
+
 /***/ "./resources/js/app/actions/tests.js":
 /***/ (function(module, exports, __webpack_require__) {
 
@@ -73673,7 +75108,8 @@ var _require = __webpack_require__("./node_modules/lodash/lodash.js"),
 var urlPrefix = '/api/';
 
 var ep = {
-	tests: 'tests'
+	tests: 'tests',
+	logs: 'logs'
 };
 
 var defaults = {
@@ -73687,6 +75123,14 @@ var defaults = {
 var post = function post(url, data) {
 	return _handle(call({
 		method: 'POST',
+		url: url,
+		data: data
+	}));
+};
+
+var get = function get(url, data) {
+	return _handle(call({
+		method: 'GET',
 		url: url,
 		data: data
 	}));
@@ -73780,6 +75224,7 @@ module.exports = {
 	ep: ep,
 	call: call,
 	post: post,
+	get: get,
 	multipartPost: multipartPost,
 	makeQuery: makeQuery
 };
@@ -73796,14 +75241,173 @@ var _require = __webpack_require__("./node_modules/angular/index.js"),
     _module = _require.module;
 
 __webpack_require__("./resources/js/app/controllers.module.js");
-// require('./components.module');
+__webpack_require__("./resources/js/app/components.module.js");
 // require('./directives.module');
 // require('./services.module');
 // require('./filters.module');
 
-_module('AppModule', ['ControllersModule']
-// 'ComponentsModule'
-);
+_module('AppModule', ['ControllersModule', 'ComponentsModule']);
+
+/***/ }),
+
+/***/ "./resources/js/app/components.module.js":
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _require = __webpack_require__("./node_modules/angular/index.js"),
+    _module = _require.module;
+
+var LogStreamComponent = __webpack_require__("./resources/js/app/components/logStream.component.js");
+
+_module('ComponentsModule', []).component('logStream', LogStreamComponent);
+
+/***/ }),
+
+/***/ "./resources/js/app/components/logStream.component.js":
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _createClass = function () {
+	function defineProperties(target, props) {
+		for (var i = 0; i < props.length; i++) {
+			var descriptor = props[i];descriptor.enumerable = descriptor.enumerable || false;descriptor.configurable = true;if ("value" in descriptor) descriptor.writable = true;Object.defineProperty(target, descriptor.key, descriptor);
+		}
+	}return function (Constructor, protoProps, staticProps) {
+		if (protoProps) defineProperties(Constructor.prototype, protoProps);if (staticProps) defineProperties(Constructor, staticProps);return Constructor;
+	};
+}();
+
+function _classCallCheck(instance, Constructor) {
+	if (!(instance instanceof Constructor)) {
+		throw new TypeError("Cannot call a class as a function");
+	}
+}
+
+var ansi = __webpack_require__("./node_modules/ansicolor/build/ansicolor.js");
+
+var _require = __webpack_require__("./node_modules/lodash/lodash.js"),
+    first = _require.first;
+
+var _require2 = __webpack_require__("./resources/js/app/actions/stream.js"),
+    _openStream = _require2.openStream,
+    _closeStream = _require2.closeStream,
+    _updateStream = _require2.updateStream;
+
+ansi.rgb = {
+	black: [39, 43, 45],
+	darkGray: [100, 100, 100],
+	lightGray: [200, 200, 200],
+	white: [255, 255, 255],
+	red: [204, 0, 0],
+	lightRed: [255, 51, 0],
+	green: [0, 204, 0],
+	lightGreen: [51, 204, 51],
+	yellow: [204, 102, 0],
+	lightYellow: [255, 153, 51],
+	blue: [0, 0, 255],
+	lightBlue: [26, 140, 255],
+	magenta: [204, 0, 204],
+	lightMagenta: [255, 0, 255],
+	cyan: [0, 153, 255],
+	lightCyan: [0, 204, 255]
+};
+
+var LogStreamController = function () {
+	function LogStreamController($scope, $ngRedux) {
+		var _this = this;
+
+		_classCallCheck(this, LogStreamController);
+
+		this.$scope = $scope;
+
+		$ngRedux.connect(function (state) {
+			return _this.mapStateToThis(state, _this);
+		}, this.mapDispatchToThis)(this);
+	}
+
+	_createClass(LogStreamController, [{
+		key: 'mapStateToThis',
+		value: function mapStateToThis(_ref, _ref2) {
+			var stream = _ref.stream,
+			    tests = _ref.tests.tests;
+			var id = _ref2.id;
+
+			return {
+				stream: stream[id] ? stream[id] : null,
+				test: first(tests, { id: id }),
+				content: stream[id] && stream[id]['content'] ? ansi.parse(stream[id]['content']) : null
+			};
+		}
+	}, {
+		key: 'mapDispatchToThis',
+		value: function mapDispatchToThis(dispatch) {
+			return {
+				openStream: function openStream(id) {
+					return dispatch(_openStream(id));
+				},
+				closeStream: function closeStream(id) {
+					return dispatch(_closeStream(id));
+				},
+				updateStream: function updateStream(id) {
+					return dispatch(_updateStream(id));
+				}
+			};
+		}
+	}, {
+		key: '$onInit',
+		value: function $onInit() {
+			var _this2 = this;
+
+			if (this.id) {
+				if (!this.stream) {
+					this.openStream(this.id);
+				}
+
+				this.$scope.$watch(function () {
+					return _this2.test.running;
+				}, function () {
+					if (!_this2.test.running) {
+						_this2.closeStream(_this2.id);
+					}
+				}, true);
+
+				this.$scope.$watch(function () {
+					return _this2.stream['updating'];
+				}, function () {
+					if (!_this2.stream.updating && _this2.stream.open && !_this2.timeout) {
+						_this2.timeout = setTimeout(function () {
+							_this2.updateStream(_this2.id);_this2.timeout = null;
+						}, 2000);
+					}
+				}, true);
+			}
+		}
+	}, {
+		key: 'nl2br',
+		value: function nl2br(str) {
+			if (typeof str === 'undefined' || str === null) {
+				return '';
+			}
+			var breakTag = '<br>';
+			return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1' + breakTag + '$2');
+		}
+	}]);
+
+	return LogStreamController;
+}();
+
+module.exports = {
+	bindings: {
+		id: '<'
+	},
+	controller: ['$scope', '$ngRedux', LogStreamController],
+	controllerAs: 'vm',
+	template: ['<div class="logStream" ng-if="vm.content">', '<span class="logStream__line" ng-repeat="line in vm.content.spans track by $index" style="{{ line.css }}"ng-bind-html="vm.nl2br(line.text)"></span>', '</div>'].join('')
+};
 
 /***/ }),
 
@@ -73959,7 +75563,7 @@ var _require = __webpack_require__("./node_modules/redux/es/redux.js"),
     combineReducers = _require.combineReducers;
 
 var tests = __webpack_require__("./resources/js/app/reducers/tests.js");
-// const filter = require('./filter');
+var stream = __webpack_require__("./resources/js/app/reducers/stream.js");
 // const issues = require('./issues');
 
 module.exports = combineReducers({
@@ -73967,8 +75571,65 @@ module.exports = combineReducers({
 		var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 		return state;
 	},
-	tests: tests
+	tests: tests,
+	stream: stream
 });
+
+/***/ }),
+
+/***/ "./resources/js/app/reducers/stream.js":
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _extends = Object.assign || function (target) {
+	for (var i = 1; i < arguments.length; i++) {
+		var source = arguments[i];for (var key in source) {
+			if (Object.prototype.hasOwnProperty.call(source, key)) {
+				target[key] = source[key];
+			}
+		}
+	}return target;
+};
+
+var _require = __webpack_require__("./resources/js/app/actions/stream.js"),
+    STREAM_TYPES = _require.STREAM_TYPES;
+
+var INITIAL_STATE = {};
+
+module.exports = function () {
+	var state = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : INITIAL_STATE;
+	var action = arguments[1];
+
+	switch (action.type) {
+		case STREAM_TYPES.OPEN_STREAM:
+			state[action.id] = {
+				content: null,
+				updating: false,
+				open: true
+			};
+			break;
+		case STREAM_TYPES.CLOSE_STREAM:
+			state[action.id] = _extends({}, state[action.id], {
+				open: false
+			});
+			break;
+		case STREAM_TYPES.UPDATE_STREAM:
+			state[action.id] = _extends({}, state[action.id], {
+				updating: true
+			});
+			break;
+		case STREAM_TYPES.UPDATE_STREAM_COMPLETE:
+			state[action.id] = _extends({}, state[action.id], {
+				content: action.content,
+				updating: false
+			});
+			break;
+	}
+
+	return state;
+};
 
 /***/ }),
 
@@ -74064,6 +75725,7 @@ var _require3 = __webpack_require__("./node_modules/redux-logger/dist/redux-logg
 var thunk = __webpack_require__("./node_modules/redux-thunk/es/index.js").default;
 
 __webpack_require__("./node_modules/ng-redux/es/ng-redux.js");
+__webpack_require__("./node_modules/angular-sanitize/index.js");
 var Pusher = __webpack_require__("./node_modules/pusher-js/dist/web/pusher.js");
 
 // External Libraries
@@ -74083,7 +75745,7 @@ if (true) {
 var rootReducer = __webpack_require__("./resources/js/app/reducers/index.js");
 var store = createStore(rootReducer, initialState, applyMiddleware.apply(undefined, _toConsumableArray(middleware)));
 
-_module('AccTester', ['AppModule', 'ngRedux']).factory('$pusher', function () {
+_module('AccTester', ['AppModule', 'ngRedux', 'ngSanitize']).factory('$pusher', function () {
 	return new Pusher("7d85352439f97870c0eb", {
 		cluster: "eu"
 	});

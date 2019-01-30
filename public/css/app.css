@@ -1,0 +1,12 @@
+.logStream{
+  background:#080F0F;
+  padding:20px;
+  max-height:800px;
+  overflow-y:auto;
+  font-family:monospace;
+}
+
+.logStream__line{
+  color:#BEC3C6;
+}
+
