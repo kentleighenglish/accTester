@@ -1,4 +1,4 @@
-const { addTest, eventTestQueued, eventTestStarted, eventTestComplete, eventTestFailed } = require('app/actions/tests');
+const { addTest, setActiveTest, eventTestQueued, eventTestStarted, eventTestComplete, eventTestFailed } = require('app/actions/tests');
 const { findIndex } = require('lodash');
 
 class AppController {
@@ -9,6 +9,7 @@ class AppController {
 		$ngRedux.connect(this.mapStateToThis, this.mapDispatchToThis)(this);
 
 		this.disabled = false;
+		this.active = null;
 	}
 
 	$onInit()
@@ -46,6 +47,7 @@ class AppController {
 	{
 		return {
 			addTest: test => dispatch(addTest(test)),
+			setActiveTest: id => dispatch(setActiveTest(id)),
 			eventTestQueued: test => dispatch(eventTestQueued(test)),
 			eventTestStarted: test => dispatch(eventTestStarted(test)),
 			eventTestComplete: test => dispatch(eventTestComplete(test)),

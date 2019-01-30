@@ -4,7 +4,8 @@ const { findIndex, filter } = require('lodash');
 const INITIAL_STATE = {
 	tests: [],
 	running: 0,
-	failed: 0
+	failed: 0,
+	activeTest: null
 }
 
 module.exports = (state = INITIAL_STATE, action) => {
@@ -23,6 +24,7 @@ module.exports = (state = INITIAL_STATE, action) => {
 				state.tests[i] = action.test;
 			} else if (i !== null) {
 				state.tests.push(action.test);
+				state.activeTest = action.test.id;
 			}
 
 			state = {
@@ -30,6 +32,9 @@ module.exports = (state = INITIAL_STATE, action) => {
 				running: filter(state.tests, { running: true }).length,
 				failed: filter(state.tests, { failed: true }).length
 			}
+		break;
+		case TESTS_TYPES.SET_ACTIVE_TEST:
+			state.activeTest = action.id;
 		break;
 	}
 

@@ -23,7 +23,7 @@ class BehatService {
 		$filePath = storage_path("app/uploads/${filename}");
 		$binPath = base_path("vendor/bin/behat");
 
-		$cmd = 'script -q -c "'.$binPath.' --suite '.$domain.'" '.$filePath;
+		$cmd = 'script -q -c "'.$binPath.' -p '.$domain.'" '.$filePath;
 		Log::debug('Starting Test: '.$cmd);
 
 		exec($cmd);

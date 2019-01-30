@@ -75023,7 +75023,8 @@ var TESTS_TYPES = {
 	'TEST_QUEUED': 'TESTS@TEST_QUEUED',
 	'TEST_STARTED': 'TESTS@TEST_STARTED',
 	'TEST_COMPLETE': 'TESTS@TEST_COMPLETE',
-	'TEST_FAILED': 'TESTS@TEST_FAILED'
+	'TEST_FAILED': 'TESTS@TEST_FAILED',
+	'SET_ACTIVE_TEST': 'TESTS@SET_ACTIVE_TEST'
 };
 
 var addTest = function addTest(test) {
@@ -75066,8 +75067,16 @@ var eventTestFailed = function eventTestFailed(test) {
 	};
 };
 
+var setActiveTest = function setActiveTest(id) {
+	return {
+		type: TESTS_TYPES.SET_ACTIVE_TEST,
+		id: id
+	};
+};
+
 module.exports = {
 	addTest: addTest,
+	setActiveTest: setActiveTest,
 	eventTestQueued: eventTestQueued,
 	eventTestStarted: eventTestStarted,
 	eventTestComplete: eventTestComplete,
@@ -75298,7 +75307,7 @@ var _require2 = __webpack_require__("./resources/js/app/actions/stream.js"),
     _updateStream = _require2.updateStream;
 
 ansi.rgb = {
-	black: [39, 43, 45],
+	black: [43, 49, 53],
 	darkGray: [100, 100, 100],
 	lightGray: [200, 200, 200],
 	white: [255, 255, 255],
@@ -75318,28 +75327,26 @@ ansi.rgb = {
 
 var LogStreamController = function () {
 	function LogStreamController($scope, $ngRedux) {
-		var _this = this;
-
 		_classCallCheck(this, LogStreamController);
 
 		this.$scope = $scope;
 
-		$ngRedux.connect(function (state) {
-			return _this.mapStateToThis(state, _this);
-		}, this.mapDispatchToThis)(this);
+		$ngRedux.connect(this.mapStateToThis, this.mapDispatchToThis)(this);
 	}
 
 	_createClass(LogStreamController, [{
 		key: 'mapStateToThis',
-		value: function mapStateToThis(_ref, _ref2) {
+		value: function mapStateToThis(_ref) {
 			var stream = _ref.stream,
-			    tests = _ref.tests.tests;
-			var id = _ref2.id;
+			    _ref$tests = _ref.tests,
+			    tests = _ref$tests.tests,
+			    activeTest = _ref$tests.activeTest;
 
 			return {
-				stream: stream[id] ? stream[id] : null,
-				test: first(tests, { id: id }),
-				content: stream[id] && stream[id]['content'] ? ansi.parse(stream[id]['content']) : null
+				stream: stream[activeTest] ? stream[activeTest] : null,
+				test: first(tests, { activeTest: activeTest }),
+				content: stream[activeTest] && stream[activeTest]['content'] ? ansi.parse(stream[activeTest]['content']) : null,
+				activeTest: activeTest
 			};
 		}
 	}, {
@@ -75360,31 +75367,15 @@ var LogStreamController = function () {
 	}, {
 		key: '$onInit',
 		value: function $onInit() {
-			var _this2 = this;
+			var _this = this;
 
-			if (this.id) {
-				if (!this.stream) {
-					this.openStream(this.id);
-				}
+			this.initStream();
 
-				this.$scope.$watch(function () {
-					return _this2.test.running;
-				}, function () {
-					if (!_this2.test.running) {
-						_this2.closeStream(_this2.id);
-					}
-				}, true);
-
-				this.$scope.$watch(function () {
-					return _this2.stream['updating'];
-				}, function () {
-					if (!_this2.stream.updating && _this2.stream.open && !_this2.timeout) {
-						_this2.timeout = setTimeout(function () {
-							_this2.updateStream(_this2.id);_this2.timeout = null;
-						}, 2000);
-					}
-				}, true);
-			}
+			this.$scope.$watch(function () {
+				return _this.activeTest;
+			}, function () {
+				_this.initStream();
+			});
 		}
 	}, {
 		key: 'nl2br',
@@ -75394,6 +75385,40 @@ var LogStreamController = function () {
 			}
 			var breakTag = '<br>';
 			return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1' + breakTag + '$2');
+		}
+	}, {
+		key: 'initStream',
+		value: function initStream() {
+			var _this2 = this;
+
+			if (this.activeTest) {
+				if (this.updateWatch) {
+					this.updateWatch();
+				}
+
+				if (!this.stream) {
+					this.openStream(this.activeTest);
+				}
+
+				this.$scope.$watch(function () {
+					return _this2.test.running;
+				}, function () {
+					if (!_this2.test.running) {
+						_this2.updateStream(_this2.activeTest);
+						_this2.closeStream(_this2.activeTest);
+					}
+				}, true);
+
+				this.updateWatch = this.$scope.$watch(function () {
+					return _this2.stream['updating'];
+				}, function () {
+					if (!_this2.stream.updating && _this2.stream.open && !_this2.timeout) {
+						_this2.timeout = setTimeout(function () {
+							_this2.updateStream(_this2.activeTest);_this2.timeout = null;
+						}, 2000);
+					}
+				}, true);
+			}
 		}
 	}]);
 
@@ -75450,6 +75475,7 @@ function _classCallCheck(instance, Constructor) {
 
 var _require = __webpack_require__("./resources/js/app/actions/tests.js"),
     _addTest = _require.addTest,
+    _setActiveTest = _require.setActiveTest,
     _eventTestQueued = _require.eventTestQueued,
     _eventTestStarted = _require.eventTestStarted,
     _eventTestComplete = _require.eventTestComplete,
@@ -75466,6 +75492,7 @@ var AppController = function () {
 		$ngRedux.connect(this.mapStateToThis, this.mapDispatchToThis)(this);
 
 		this.disabled = false;
+		this.active = null;
 	}
 
 	_createClass(AppController, [{
@@ -75518,6 +75545,9 @@ var AppController = function () {
 			return {
 				addTest: function addTest(test) {
 					return dispatch(_addTest(test));
+				},
+				setActiveTest: function setActiveTest(id) {
+					return dispatch(_setActiveTest(id));
 				},
 				eventTestQueued: function eventTestQueued(test) {
 					return dispatch(_eventTestQueued(test));
@@ -75659,7 +75689,8 @@ var _require2 = __webpack_require__("./node_modules/lodash/lodash.js"),
 var INITIAL_STATE = {
 	tests: [],
 	running: 0,
-	failed: 0
+	failed: 0,
+	activeTest: null
 };
 
 module.exports = function () {
@@ -75681,12 +75712,16 @@ module.exports = function () {
 				state.tests[i] = action.test;
 			} else if (i !== null) {
 				state.tests.push(action.test);
+				state.activeTest = action.test.id;
 			}
 
 			state = _extends({}, state, {
 				running: filter(state.tests, { running: true }).length,
 				failed: filter(state.tests, { failed: true }).length
 			});
+			break;
+		case TESTS_TYPES.SET_ACTIVE_TEST:
+			state.activeTest = action.id;
 			break;
 	}
 

@@ -3,7 +3,7 @@ const { first } = require('lodash');
 const { openStream, closeStream, updateStream } = require('app/actions/stream');
 
 ansi.rgb = {
-	black:        [ 39,  43,  45],
+	black:        [ 43,  49,  53],
 	darkGray:     [100, 100, 100],
     lightGray:    [200, 200, 200],
     white:        [255, 255, 255],
@@ -26,14 +26,15 @@ class LogStreamController {
 	constructor($scope, $ngRedux) {
 		this.$scope = $scope;
 
-		$ngRedux.connect((state) => this.mapStateToThis(state, this), this.mapDispatchToThis)(this)
+		$ngRedux.connect(this.mapStateToThis, this.mapDispatchToThis)(this)
 	}
 
-	mapStateToThis({ stream, tests: { tests } }, { id }) {
+	mapStateToThis({ stream, tests: { tests, activeTest } }) {
 		return {
-			stream: stream[id] ? stream[id] : null,
-			test: first(tests, { id }),
-			content: stream[id] && stream[id]['content'] ? ansi.parse(stream[id]['content']) : null
+			stream: stream[activeTest] ? stream[activeTest] : null,
+			test: first(tests, { activeTest }),
+			content: stream[activeTest] && stream[activeTest]['content'] ? ansi.parse(stream[activeTest]['content']) : null,
+			activeTest
 		}
 	}
 
@@ -46,26 +47,11 @@ class LogStreamController {
 	}
 
 	$onInit() {
-		if (this.id) {
-			if (!this.stream) {
-				this.openStream(this.id);
-			}
+		this.initStream();
 
-			this.$scope.$watch(() => this.test.running, () => {
-				if (!this.test.running) {
-					this.closeStream(this.id);
-				}
-			}, true);
-
-			this.$scope.$watch(() => this.stream['updating'], () => {
-				if (!this.stream.updating && this.stream.open && !this.timeout) {
-					this.timeout = setTimeout(
-						() => { this.updateStream(this.id); this.timeout = null },
-						2000
-					);
-				}
-			}, true);
-		}
+		this.$scope.$watch(() => this.activeTest, () => {
+			this.initStream();
+		});
 	}
 
 	nl2br (str) {
@@ -74,6 +60,34 @@ class LogStreamController {
 		}
 		var breakTag = '<br>';
 		return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, `$1${breakTag}$2`);
+	}
+
+	initStream() {
+		if (this.activeTest) {
+			if (this.updateWatch) {
+				this.updateWatch();
+			}
+
+			if (!this.stream) {
+				this.openStream(this.activeTest);
+			}
+
+			this.$scope.$watch(() => this.test.running, () => {
+				if (!this.test.running) {
+					this.updateStream(this.activeTest);
+					this.closeStream(this.activeTest);
+				}
+			}, true);
+
+			this.updateWatch = this.$scope.$watch(() => this.stream['updating'], () => {
+				if (!this.stream.updating && this.stream.open && !this.timeout) {
+					this.timeout = setTimeout(
+						() => { this.updateStream(this.activeTest); this.timeout = null },
+						2000
+					);
+				}
+			}, true);
+		}
 	}
 
 }
