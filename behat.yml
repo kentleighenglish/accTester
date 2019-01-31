@@ -2,12 +2,17 @@ namcomarketing.com:
   suites:
     default:
       paths: [ '%paths.base%/features/namcomarketing.com/' ]
-      contexts: [ 'FeatureContext' ]
+      contexts:
+        - FeatureContext
   extensions:
     Bex\Behat\ScreenshotExtension:
       image_drivers:
         local:
           screenshot_directory: "%paths.base%/public/screenshots/"
     Behat\MinkExtension:
-      base_url: 'http://dev.namcomarketing.com'
+      base_url: http://namco:teamwork@dev.namcomarketing.com
+      browser_name: 'chrome'
       selenium2: ~
+      sessions:
+        default:
+           selenium2: ~
