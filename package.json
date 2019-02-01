@@ -21,7 +21,9 @@
   "license": "ISC",
   "dependencies": {
     "angular": "^1.7.6",
+    "ansicolor": "^1.1.78",
     "axios": "^0.18.0",
+    "babel-plugin-transform-async-to-generator": "^6.24.1",
     "lodash": "^4.17.11",
     "ng-redux": "^4.1.0",
     "pusher-js": "^4.3.1",

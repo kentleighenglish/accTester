@@ -11,9 +11,11 @@
 |
 */
 
+
 $router->get('/', 'PageController@index');
 
 $router->group([ 'prefix' => 'api', 'namespace' => 'Api' ], function() use ($router) {
 
+	$router->get('logs/{id}', 'TestsController@log');
 	$router->post('tests', 'TestsController@add');
 });

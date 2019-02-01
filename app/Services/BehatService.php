@@ -19,8 +19,7 @@ class BehatService {
 		$id = $test->id;
 		$domain = $test->domain;
 
-		$filename = "${id}.log";
-		$filePath = storage_path().DS.'uploads'.DS.$filename;
+		$filePath = storage_path("uploads/${id}.log");
 		$binPath = base_path().DS.'vendor'.DS.'bin'.DS.'behat';
 
 		$cmd = 'script -q "'.$filePath.'" '.$binPath.' --suite '.$domain;

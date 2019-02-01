@@ -21,4 +21,6 @@
 			</li>
 		</ul>
 	</div>
+
+	<log-stream id="1"></log-stream>
 @endsection

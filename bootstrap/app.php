@@ -33,6 +33,7 @@ $app->withEloquent();
 
 $app->configure('app');
 $app->configure('broadcasting');
+$app->configure('filesystems');
 
 /*
 |--------------------------------------------------------------------------
