@@ -19,10 +19,10 @@ class BehatService {
 		$id = $test->id;
 		$domain = $test->domain;
 
-		$filePath = storage_path("uploads/${id}.log");
-		$binPath = base_path().DS.'vendor'.DS.'bin'.DS.'behat';
+		$filePath = storage_path("app/uploads/${id}.log");
+		$binPath = base_path("vendor/bin/behat");
 
-		$cmd = 'script -q "'.$filePath.'" '.$binPath.' --suite '.$domain;
+		$cmd = 'script -q -c "'.$binPath.' -p '.$domain.'" '.$filePath;
 		Log::debug('Starting Test: '.$cmd);
 
 		exec($cmd);

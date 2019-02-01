@@ -5,7 +5,8 @@ const TESTS_TYPES = {
 	'TEST_QUEUED': 'TESTS@TEST_QUEUED',
 	'TEST_STARTED': 'TESTS@TEST_STARTED',
 	'TEST_COMPLETE': 'TESTS@TEST_COMPLETE',
-	'TEST_FAILED': 'TESTS@TEST_FAILED'
+	'TEST_FAILED': 'TESTS@TEST_FAILED',
+	'SET_ACTIVE_TEST': 'TESTS@SET_ACTIVE_TEST',
 }
 
 const addTest = (test) => (dispatch) => {
@@ -40,8 +41,14 @@ const eventTestFailed = test => ({
 	test
 });
 
+const setActiveTest = id => ({
+	type: TESTS_TYPES.SET_ACTIVE_TEST,
+	id
+});
+
 module.exports = {
 	addTest,
+	setActiveTest,
 	eventTestQueued,
 	eventTestStarted,
 	eventTestComplete,

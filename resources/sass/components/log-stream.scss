@@ -1,0 +1,20 @@
+
+log-stream {
+	width: 100%;
+	height: 100%;
+}
+
+.logStream {
+	background: #080F0F;
+	padding: 20px;
+	width: 100%;
+	height: 100%;
+	overflow-y: auto;
+	font-family: monospace;
+	border-radius: 5px;
+
+	&__line {
+		color: #BEC3C6;
+		white-space: nowrap;
+	}
+}

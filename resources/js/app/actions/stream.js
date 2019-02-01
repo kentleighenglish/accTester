@@ -1,28 +1,19 @@
-const { get, ep } = require('app/api');
+const { get } = require('axios');
 
 const STREAM_TYPES = {
 	'OPEN_STREAM': 'STREAM@OPEN_STREAM',
-	'UPDATE_STREAM': 'STREAM@UPDATE_STREAM',
 	'CLOSE_STREAM': 'STREAM@CLOSE_STREAM',
+	'UPDATE_STREAM': 'STREAM@UPDATE_STREAM',
+	'UPDATE_STREAM_COMPLETE': 'STREAM@UPDATE_STREAM_COMPLETE',
 }
 
-const openStream = (id, once = true) => (dispatch) => {
-	const updateStream = () => {
-		get(ep['log']+id).then(response => {
-			dispatch({
-				type: STREAM_TYPES.UPDATE_STREAM,
-				id,
-				content: response.data
-			});
-		});
-	}
-
+const openStream = (id) => (dispatch) => {
 	dispatch({
 		type: STREAM_TYPES.OPEN_STREAM,
-		id,
-		once,
-		update: updateStream
+		id
 	});
+
+	dispatch(updateStream(id));
 }
 
 const closeStream = id => ({
@@ -30,8 +21,28 @@ const closeStream = id => ({
 	id
 });
 
+const updateStream = (id) => dispatch => {
+	dispatch({
+		type: STREAM_TYPES.UPDATE_STREAM,
+		id
+	});
+
+	get(`/api/logs/${id}`).then((response) => {
+		const { data } = response;
+
+		dispatch({
+			type: STREAM_TYPES.UPDATE_STREAM_COMPLETE,
+			id,
+			content: data
+		});
+	})
+	// eslint-disable-next-line
+	.catch((e) => console.error(e));
+}
+
 module.exports = {
 	openStream,
 	closeStream,
+	updateStream,
 	STREAM_TYPES
 }

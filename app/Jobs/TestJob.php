@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use Illuminate\Support\Facades\Log;
+
 use App\Events\{TestStartedEvent, TestCompleteEvent, TestFailedEvent};
 use App\Services\BehatService;
 
@@ -34,7 +36,7 @@ class TestJob extends Job
 		// Start Test
 		$this->test->running = true;
 		$this->test->save();
-
+		Log::debug("Starting Test");
 		event(new TestStartedEvent($this->test));
 
 		$this->behat->run($this->test);
@@ -44,6 +46,7 @@ class TestJob extends Job
 		$this->test->running = false;
 		$this->test->save();
 
+		Log::debug("Finishing Test");
 		event(new TestCompleteEvent($this->test));
 	}
 

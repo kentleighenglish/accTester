@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use Illuminate\Http\Request;
-use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
+
+use App\Http\Controllers\Controller;
 
 use App\Services\TestsService;
 
@@ -42,9 +43,9 @@ class TestsController extends Controller
 
 	public function log($id)
 	{
-		$path = "uploads/${id}.log";
-
-		return Storage::get($path);
+		if ($id) {
+			return Storage::get("uploads/${id}.log");
+		}
 	}
 
 }

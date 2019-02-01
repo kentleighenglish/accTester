@@ -5,7 +5,7 @@ const urlPrefix = '/api/';
 
 const ep = {
 	tests: 'tests',
-	log: 'logs/'
+	logs: 'logs'
 };
 
 var defaults = {
@@ -24,10 +24,11 @@ const post = (url, data) => {
 	}));
 }
 
-const get = (url) => {
+const get = (url, data) => {
 	return _handle(call({
 		method: 'GET',
-		url
+		url,
+		data
 	}));
 }
 
