@@ -14,6 +14,10 @@ class TestJob extends Job
 
 	protected $behat;
 
+	public $timeout = 120;
+
+	public $tries = 1;
+
 	/**
 	 * Create a new job instance.
 	 *
@@ -39,12 +43,16 @@ class TestJob extends Job
 		Log::debug("Starting Test");
 		event(new TestStartedEvent($this->test));
 
-		$this->behat->run($this->test);
+		$result = $this->behat->run($this->test);
 
 		// Complete Test
 		$this->test->run = true;
 		$this->test->running = false;
 		$this->test->save();
+
+		if ($result !== true) {
+			$this->fail($result);
+		}
 
 		Log::debug("Finishing Test");
 		event(new TestCompleteEvent($this->test));
@@ -53,16 +61,18 @@ class TestJob extends Job
 	/**
 	 * Handle a job failure.
 	 *
-	 * @param  \App\Events\OrderShipped  $event
+	 * @param  \App\Events\Event  $event
 	 * @param  \Exception  $exception
 	 * @return void
 	 */
-	public function failed(OrderShipped $event, $exception)
+	public function failed($exception)
 	{
 		$this->test->failed = true;
 		$this->test->running = false;
 		$this->test->save();
 
 		event(new TestFailedEvent($this->test));
+
+		throw $exception;
 	}
 }

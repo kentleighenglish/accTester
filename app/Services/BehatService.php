@@ -23,9 +23,23 @@ class BehatService {
 		$binPath = base_path("vendor/bin/behat");
 
 		$cmd = 'script -q -c "'.$binPath.' -p '.$domain.'" '.$filePath;
-		Log::debug('Starting Test: '.$cmd);
 
-		exec($cmd);
+		Log::debug('Starting Test: '.$cmd);
+		exec($cmd, $output, $result);
+
+
+		if ($result === 1) {
+			Log::debug("Syntax Failed, trying different one.");
+			$cmd = 'script -q "'.$filePath.'" '.$binPath.' -p '.$domain;
+			Log::debug('Re-Trying Test: '.$cmd);
+			exec($cmd, $output, $result);
+		}
+
+		if ($result > 0) {
+			return $output;
+		} else {
+			return true;
+		}
 	}
 
 }
