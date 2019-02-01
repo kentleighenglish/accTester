@@ -11,8 +11,12 @@ namcomarketing.com:
           screenshot_directory: "%paths.base%/public/screenshots/"
     Behat\MinkExtension:
       base_url: http://namco:teamwork@dev.namcomarketing.com
+      javascript_session: selenium2
       browser_name: 'chrome'
-      selenium2: ~
+      selenium2:
+        browser: firefox
+        wd_host: http://127.0.0.1:4444/wd/hub
+        capabilities: { "browserName": "chrome", "browser": "chrome", "version": "60", 'chrome': {'switches': ['--no-sandbox', '--headless'] } }
       sessions:
         default:
            selenium2: ~
