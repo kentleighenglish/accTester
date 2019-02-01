@@ -31,6 +31,8 @@ class FeatureContext extends MinkContext implements Context
      */
     public function beforeScenario()
     {
+		$driver = $this->getMink()->getSession()->getDriver();
+
 		$this->getMink()->getSession()->start();
 		$this->getSession()->resizeWindow(1024, 768, 'current');
 		$this->visit('/');
