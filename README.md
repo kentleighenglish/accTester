@@ -7,4 +7,5 @@ To add a new test suite (domain) you will need to:
 
 
 Chrome will need to be installed and run in headless mode.
+
 ```google-chrome-stable --headless --disable-gpu --remote-debugging-port=9222```

@@ -75414,8 +75414,11 @@ var LogStreamController = function () {
 				}, function () {
 					if (!_this2.stream.updating && _this2.stream.open && !_this2.timeout) {
 						_this2.timeout = setTimeout(function () {
-							_this2.updateStream(_this2.activeTest);_this2.timeout = null;
-						}, 2000);
+							_this2.updateStream(_this2.activeTest);
+							if (!_this2.test.running) {
+								_this2.timeout = null;
+							}
+						}, 100);
 					}
 				}, true);
 			}

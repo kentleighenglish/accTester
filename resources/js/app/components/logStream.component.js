@@ -82,8 +82,13 @@ class LogStreamController {
 			this.updateWatch = this.$scope.$watch(() => this.stream['updating'], () => {
 				if (!this.stream.updating && this.stream.open && !this.timeout) {
 					this.timeout = setTimeout(
-						() => { this.updateStream(this.activeTest); this.timeout = null },
-						2000
+						() => {
+							this.updateStream(this.activeTest);
+							if (!this.test.running) {
+								this.timeout = null;
+							}
+						},
+						100
 					);
 				}
 			}, true);

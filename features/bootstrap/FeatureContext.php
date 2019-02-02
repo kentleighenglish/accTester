@@ -31,11 +31,9 @@ class FeatureContext extends MinkContext implements Context
      */
     public function beforeScenario()
     {
-		$this->getMink()->getSession()->setBasicAuth('namco', 'teamwork');
-
 		$this->getMink()->getSession()->start();
-		$this->getSession()->resizeWindow(1024, 768, 'current');
-		$this->visit('/');
+		$this->getMink()->getSession()->setBasicAuth('namco', 'teamwork');
+		$this->getSession()->resizeWindow(1280, 1024, 'current');
     }
 
     /**
@@ -54,13 +52,12 @@ class FeatureContext extends MinkContext implements Context
 		$this->visit('/');
 
 		$this->assertElementOnPage('#locations .location p');
-
-		// $this->assertElementOnPage('#locations .location p');
 		$locations = $this->getSession()->getPage()->findAll('css', '#locations .location p');
 
 		foreach($locations as $location) {
 			if ($arg1 === $location->getText()) {
 				$location->click();
+				return;
 			}
 		}
 
@@ -72,7 +69,6 @@ class FeatureContext extends MinkContext implements Context
      */
     public function iAmOnTheLocationPage($arg1)
     {
-		var_dump($this->printCurrentUrl());
 		$this->assertPageAddress($arg1);
     }
 }

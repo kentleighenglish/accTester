@@ -8,7 +8,7 @@ namcomarketing.com:
   extensions:
     DMore\ChromeExtension\Behat\ServiceContainer\ChromeExtension: ~
     Behat\MinkExtension:
-      base_url: http://namcomarketing.com
+      base_url: http://dev.namcomarketing.com
       browser_name: 'chrome'
       sessions:
           default:
